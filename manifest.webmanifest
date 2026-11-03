@@ -1,0 +1,17 @@
+{
+  "name": "Mis Finanzas",
+  "short_name": "Finanzas",
+  "description": "Registro de gastos, tarjetas y deudas, cifrado y privado.",
+  "lang": "es-PE",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#EDF1EF",
+  "theme_color": "#0E6B57",
+  "icons": [
+    {"src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+    {"src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ]
+}
