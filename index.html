@@ -863,8 +863,9 @@ function netWorth(){
 /* ---------- instalación como app ---------- */
 const UA=navigator.userAgent;
 const IS_ANDROID=/Android/i.test(UA),IS_IOS=/iPhone|iPad|iPod/i.test(UA);
-const IN_APP=IS_ANDROID&&(/; wv\)|GSA\/|FBAN|FBAV|Instagram|Line\/|Lens/i.test(UA)||!/Chrome\/\d/.test(UA));
-const IS_STANDALONE=()=>matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
+const IS_NATIVE=/MisFinanzasApp/.test(UA);
+const IN_APP=!IS_NATIVE&&IS_ANDROID&&(/; wv\)|GSA\/|FBAN|FBAV|Instagram|Line\/|Lens/i.test(UA)||!/Chrome\/\d/.test(UA));
+const IS_STANDALONE=()=>IS_NATIVE||matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
 function chromeIntent(extra=''){return `intent://${location.host}${location.pathname}${extra}#Intent;scheme=https;package=com.android.chrome;end`;}
 function vInstall(){
   if(IS_STANDALONE())return '';
@@ -1571,6 +1572,7 @@ async function doAct(d){
 
 /* ---------- respaldo ---------- */
 function download(name,text,type){
+  if(window.MFNative&&MFNative.saveFile){try{MFNative.saveFile(name,type||'text/plain',text);return;}catch(e){}}
   const blob=new Blob([text],{type});const u=URL.createObjectURL(blob);const a=document.createElement('a');a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),2000);
 }
 async function doBackup(){
