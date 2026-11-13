@@ -197,6 +197,8 @@ h1.page{font:700 26px/1.2 var(--display);letter-spacing:-.02em;margin:18px 0 16p
 .tx .t1{font-weight:600;font-size:14.5px;overflow-wrap:anywhere}
 .tx .t2{font-size:12.5px;color:var(--muted);overflow-wrap:anywhere}
 .tx .amt{text-align:right;font-size:14.5px;font-weight:600;justify-self:end;color:var(--ink)}
+.tx .amt.neg{color:var(--neg)}.tx .amt.pos{color:var(--pos)}.tx .amt.xfer{color:var(--xfer)}
+.tx.situation .amt{color:var(--tx-color)}
 .tx .amt .a2{font-size:12px;color:var(--muted);font-weight:400}
 .tx-reembolso{--tx-color:var(--reembolso)}.tx-cobro{--tx-color:var(--cobro)}
 .tx-prestamo_dado{--tx-color:var(--prestamo-dado)}.tx-prestamo_recibido{--tx-color:var(--prestamo-recibido)}
@@ -998,15 +1000,16 @@ function filteredTx(){
 }
 function txRow(t){
   if(t.kind&& !['gasto','ingreso','transfer'].includes(t.kind))return situationRow(t);
+  const kind=txKind(t),cls=kind==='gasto'?'neg':kind==='ingreso'?'pos':'xfer',sign=kind==='gasto'?'−':kind==='ingreso'?'+':'';
   let dot,title,sub;
-  if(t.type==='transfer'){dot='<div class="dot t">⇄</div>';title=t.note||'Transferencia';sub=`${accName(t.acc)} → ${accName(t.to)}`;
+  if(kind==='transfer'){dot='<div class="dot t">⇄</div>';title=t.note||'Transferencia';sub=`${accName(t.acc)} → ${accName(t.to)}`;
   }
-  else{const g=t.type==='gasto';dot=`<div class="dot ${g?'g':'i'}">${esc((t.cat||'?').charAt(0))}</div>`;title=t.note||displayLabel(t.sub)||(g?'Gasto':displayLabel(t.cat)||'Ingreso');
+  else{const g=kind==='gasto';dot=`<div class="dot ${g?'g':'i'}">${esc((t.cat||'?').charAt(0))}</div>`;title=t.note||displayLabel(t.sub)||(g?'Gasto':displayLabel(t.cat)||'Ingreso');
     sub=[displayLabel(t.cat)+(t.sub?' / '+displayLabel(t.sub):''),accName(t.acc),t.desc].filter(Boolean).join(' · ');}
-  return `<div class="tx" data-act="editTx" data-id="${t.id}">${dot}<div class="mid"><div class="t1">${esc(title)}</div><div class="t2">${esc(sub)}</div></div><div class="amt num">${txAmount(t)}</div></div>`;
+  return `<div class="tx" data-act="editTx" data-id="${t.id}">${dot}<div class="mid"><div class="t1">${esc(title)}</div><div class="t2">${esc(sub)}</div></div><div class="amt num ${cls}">${txAmount(t,sign)}</div></div>`;
 }
-function txAmount(t){const cur=txCurrency(t),target=t.to?acc(t.to):null;
-  return money(t.amount,cur)+(target&&target.currency!==cur?`<div class="a2">→ ${money(t.toAmount,target.currency)}</div>`:cur!=='PEN'?`<div class="a2">≈ ${money(txPen(t))}</div>`:'');}
+function txAmount(t,sign=''){const cur=txCurrency(t),target=t.to?acc(t.to):null;
+  return sign+money(t.amount,cur)+(target&&target.currency!==cur?`<div class="a2">→ ${money(t.toAmount,target.currency)}</div>`:cur!=='PEN'?`<div class="a2">≈ ${money(txPen(t))}</div>`:'');}
 function vMovs(){
   const list=filteredTx();let ing=0,gas=0;list.forEach(t=>{gas+=expensePen(t);ing+=incomePen(t);});
   const days={};list.forEach(t=>(days[t.date.slice(0,10)]??=[]).push(t));
