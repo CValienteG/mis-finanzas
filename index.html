@@ -203,10 +203,12 @@ h1.page{font:700 26px/1.2 var(--display);letter-spacing:-.02em;margin:18px 0 16p
 .tx-reembolso{--tx-color:var(--reembolso)}.tx-cobro{--tx-color:var(--cobro)}
 .tx-prestamo_dado{--tx-color:var(--prestamo-dado)}.tx-prestamo_recibido{--tx-color:var(--prestamo-recibido)}
 .tx-pago_tarjeta{--tx-color:var(--pago-tarjeta)}.tx-pago_deuda{--tx-color:var(--pago-deuda)}
+.tx-ajuste{--tx-color:var(--muted)}
 .situation .dot{color:var(--tx-color);background:color-mix(in srgb,var(--tx-color) 14%,transparent)}
 .situation .t1{color:var(--tx-color)}
 .situation .t1,.situation .t2{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere}
 .settled{margin-top:18px}.settled>summary{min-height:44px;padding:10px 4px;cursor:pointer;font-weight:600;color:var(--muted)}
+.reconcile-item{padding:12px 0;border-bottom:1px solid var(--line);overflow-wrap:anywhere}.reconcile-item .actions{margin-top:8px;justify-content:flex-start}
 @media(max-width:820px){
   .tx{grid-template-columns:32px minmax(0,1fr) auto}
   .tx .dot{width:32px;height:32px}
@@ -306,6 +308,7 @@ details.more summary{cursor:pointer;color:var(--accent);font-weight:600;font-siz
 details.more summary::-webkit-details-marker{display:none}
 .toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:11px 16px;border-radius:var(--r-md);font-size:14px;z-index:30;display:flex;align-items:center;gap:14px;max-width:calc(100vw - 32px);animation:rise .2s ease-out}
 .toast button{background:none;border:none;color:var(--bg);font-weight:700;text-decoration:underline;padding:0}
+.toast.sheet-toast{top:calc(10px + env(safe-area-inset-top));bottom:auto;max-height:18dvh;overflow:auto}
 .hint{font-size:12.5px;color:var(--muted);margin-top:2px}
 
 @media (max-width:820px){
@@ -574,6 +577,7 @@ const IC={
 const ic=n=>`<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${IC[n]||''}</svg>`;
 function paintIcons(root=document){root.querySelectorAll('[data-ic]').forEach(el=>{if(el.dataset.icDone)return;el.insertAdjacentHTML('afterbegin',ic(el.dataset.ic));el.dataset.icDone=1;});}
 function toast(msg,ms=2600,action){document.querySelectorAll('.toast').forEach(x=>x.remove());const t=document.createElement('div');t.className='toast';t.setAttribute('role','status');
+  if($('#bd'))t.classList.add('sheet-toast');
   const sp=document.createElement('span');sp.textContent=msg;t.appendChild(sp);
   if(action){const b=document.createElement('button');b.textContent=action.label;b.onclick=()=>{action.fn();t.remove();};t.appendChild(b);}
   document.body.appendChild(t);setTimeout(()=>t.remove(),ms);}
@@ -640,7 +644,13 @@ function mergeStates(L,R){
   const out={...L};const del={...(R.del||{})};for(const [k,v] of Object.entries(L.del||{}))del[k]=Math.max(v,del[k]||0);
   for(const c of COLS){const m=new Map(),order=[];
     for(const e of (L[c]||[])){m.set(e.id,e);order.push(e.id);}
-    for(const e of (R[c]||[])){const x=m.get(e.id);if(!x){m.set(e.id,e);order.push(e.id);}else if((e.u||0)>(x.u||0))m.set(e.id,e);}
+    for(const e of (R[c]||[])){const x=m.get(e.id);if(!x){m.set(e.id,e);order.push(e.id);}else{
+      let winner=(e.u||0)>(x.u||0)?e:x;
+      // Un equipo anterior puede editar el nombre sin conocer la última comprobación del saldo.
+      // Se conserva esa fecha y se avanza u para que ambos equipos converjan, sin revivir borrados.
+      if(c==='accounts'&&!(del[e.id]&&del[e.id]>=(winner.u||0))){const checked=[x.checkedAt,e.checkedAt].filter(v=>typeof v==='string'&&Number.isFinite(Date.parse(v))).sort((a,b)=>Date.parse(a)-Date.parse(b)).at(-1);
+        if(checked&&winner.checkedAt!==checked)winner={...winner,checkedAt:checked,u:Math.max(Date.now(),(winner.u||0)+1)};}
+      m.set(e.id,winner);}}
     out[c]=order.map(id=>m.get(id)).filter(e=>!(del[e.id]&&del[e.id]>=(e.u||0)));}
   out.del=del;
   const cd={...(R.catDel||{})};for(const [k,v] of Object.entries(L.catDel||{}))cd[k]=Math.max(v,cd[k]||0);out.catDel=cd;
@@ -1009,7 +1019,7 @@ function txRow(t){
   return `<div class="tx" data-act="editTx" data-id="${t.id}">${dot}<div class="mid"><div class="t1">${esc(title)}</div><div class="t2">${esc(sub)}</div></div><div class="amt num ${cls}">${txAmount(t,sign)}</div></div>`;
 }
 function txAmount(t,sign=''){const cur=txCurrency(t),target=t.to?acc(t.to):null;
-  const total=txKind(t)==='pago_deuda'?r2(t.amount+debtInterest(t)):t.amount;
+  const total=txKind(t)==='ajuste'?Math.abs(t.amount):txKind(t)==='pago_deuda'?r2(t.amount+debtInterest(t)):t.amount;
   return sign+money(total,cur)+(target&&target.currency!==cur?`<div class="a2">→ ${money(t.toAmount,target.currency)}</div>`:cur!=='PEN'?`<div class="a2">≈ ${money(txKind(t)==='pago_deuda'?toPEN(total,cur):txPen(t))}</div>`:'');}
 function vMovs(){
   const list=filteredTx();let ing=0,gas=0;list.forEach(t=>{gas+=expensePen(t);ing+=incomePen(t);});
@@ -1023,9 +1033,9 @@ function vMovs(){
     <select class="input" id="facc"><option value="">Todas las cuentas</option>${S.accounts.map(a=>`<option value="${a.id}"${f.acc===a.id?' selected':''}>${esc(a.name)}</option>`).join('')}</select>
     <select class="input" id="fcat"><option value="">Todas las categorías</option>${allCats.map(c=>`<option${f.cat===c?' selected':''}>${esc(c)}</option>`).join('')}</select>
   </div>
-  <div class="chips"><span class="chip">${list.length} movimientos</span><span class="chip pos num">+${money(ing)}</span><span class="chip neg num">−${money(gas)}</span>${(f.q||f.type||f.acc||f.cat)?'<button class="chip" data-act="clearF">✕ Quitar filtros</button>':''}<button class="chip" data-act="exportCsv">Exportar CSV</button></div>
+  <div class="chips"><span class="chip">${list.length} movimientos</span><span class="chip pos num">+${money(ing)}</span><span class="chip neg num">${gas<0?'+':'−'}${money(Math.abs(gas))}</span>${(f.q||f.type||f.acc||f.cat)?'<button class="chip" data-act="clearF">✕ Quitar filtros</button>':''}<button class="chip" data-act="exportCsv">Exportar CSV</button></div>
   ${list.length?Object.entries(days).map(([d,ts])=>{let dn=0;ts.forEach(t=>{dn+=incomePen(t)-expensePen(t);});
-    return `<div class="day"><div class="dayhdr"><span>${esc(dayLabel(d))}</span><span class="num ${dn<0?'neg':dn>0?'pos':''}">${dn?money(dn):''}</span></div><div>${ts.map(txRow).join('')}</div></div>`;}).join('')
+    return `<div class="day"><div class="dayhdr"><span>${esc(dayLabel(d))}</span><span class="num ${dn<0?'neg':dn>0?'pos':''}">${dn?(dn<0?'−':'')+money(Math.abs(dn)):''}</span></div><div>${ts.map(txRow).join('')}</div></div>`;}).join('')
   :`<div class="empty"><b>No hay movimientos</b>${S.tx.length?'Prueba con otro mes o quita los filtros.':'Agrega el primero con el botón + o importa tu Excel en Ajustes.'}</div>`}`;
 }
 function bindFilters(){
@@ -1057,7 +1067,7 @@ function vCuentas(){
   +G.map(([k,title,f])=>{const list=S.accounts.filter(a=>!a.archived&&f(a));
     return `<div class="grouphead"><h2 class="sect" style="margin:0">${title}</h2><button class="btn sm" data-act="addKind" data-k="${k}">${ic('plus')}Agregar</button></div>
     <div class="card list">${list.length?list.map(a=>{const v=b[a.id]||0;const neg=LIAB.has(a.type);
-      return `<div class="acct" data-act="editAcc" data-id="${a.id}"><span class="nm">${esc(a.name)}${a.currency!=='PEN'?' <span class="pill">USD</span>':''}</span><span class="num ${neg&&v<0?'neg':''}">${neg?(v<0?'Debes ':'')+money(Math.abs(v),a.currency):money(v,a.currency)}</span>${ic('chev')}</div>`;}).join('')
+      return `<div class="acct" data-act="editAcc" data-id="${a.id}"><span class="nm">${esc(a.name)}${a.currency!=='PEN'?' <span class="pill">USD</span>':''}<span class="sub2 tiny">${checkedLabel(a)}</span></span><span class="num ${neg&&v<0?'neg':''}">${neg?(v<0?'Debes ':'')+money(Math.abs(v),a.currency):money(v,a.currency)}</span>${ic('chev')}</div>`;}).join('')
       :`<p class="muted small" style="margin:4px 0">${KINDS[k].d}</p>`}</div>`;}).join('')
   +(arch.length?`<details class="dmore" style="margin-top:14px"><summary>Cuentas ocultas (${arch.length})</summary><div class="card list">${arch.map(a=>`<div class="acct" data-act="editAcc" data-id="${a.id}"><span class="nm">${esc(a.name)}</span>${ic('chev')}</div>`).join('')}</div></details>`:'');
 }
@@ -1142,7 +1152,7 @@ document.addEventListener('change',e=>{
 });
 
 /* ---------- modales ---------- */
-function openModal(html,onMount){$('#modalRoot').innerHTML=`<div class="backdrop" id="bd"><div class="modal" role="dialog" aria-modal="true">${html}</div></div>`;
+function openModal(html,onMount){document.querySelectorAll('.toast').forEach(t=>t.remove());$('#modalRoot').innerHTML=`<div class="backdrop" id="bd"><div class="modal" role="dialog" aria-modal="true">${html}</div></div>`;
   $('#bd').addEventListener('mousedown',e=>{if(e.target.id==='bd')closeModal()});onMount&&onMount($('#modalRoot .modal'));}
 function closeModal(){$('#modalRoot').innerHTML='';}
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&$('#bd'))closeModal()});
@@ -1158,23 +1168,24 @@ function ask({title,text='',ok='Aceptar',danger=false,input=null}){
 }
 
 /* ---------- formulario de movimiento ---------- */
-function txForm(t){
+function txForm(t,pre={},original){
   const isNew=!t;
+  const originalTx=original??stripU(t);
   const lastAcc=lsGet(PREF_KEY)?JSON.parse(lsGet(PREF_KEY)).lastAcc:null;
   const active=S.accounts.filter(a=>(!a.archived||(t&&(a.id===t.acc||a.id===t.to)))&&(t||!['porcobrar','porpagar'].includes(a.type)));
   const money0=active.filter(a=>!LIAB.has(a.type)&&a.type!=='porcobrar');
   const defAcc=(active.find(a=>a.id===lastAcc)||money0[0]||active[0])?.id;
-  t=t?{...t}:{type:'gasto',date:nowLocal(),acc:defAcc,to:active.find(a=>a.id!==defAcc&&LIAB.has(a.type))?.id||active.find(a=>a.id!==defAcc)?.id||defAcc,amount:'',toAmount:'',pen:'',cat:'',sub:'',note:'',desc:''};
+  t=t?{...t}:{type:'gasto',date:nowLocal(),acc:defAcc,to:active.find(a=>a.id!==defAcc&&LIAB.has(a.type))?.id||active.find(a=>a.id!==defAcc)?.id||defAcc,amount:'',toAmount:'',pen:'',cat:'',sub:'',note:'',desc:'',...pre};
   const accOpts=sel=>active.map(a=>`<option value="${a.id}"${a.id===sel?' selected':''}>${esc(a.name)}</option>`).join('');
   const dateTxt=d=>{if(!d)return '';const day=d.slice(0,10),k=daysBetween(day,todayStr());return (k===0?'Hoy':k===1?'Ayer':fmtD(day,{day:'numeric',month:'short',year:'numeric'}))+', '+d.slice(11,16);};
   const HELP={gasto:'Compras, comida, pasajes o servicios para ti.',ingreso:'Sueldo, ventas u otro ingreso. Si te devolvieron dinero, elige Me devolvieron.',transfer:'Mueve dinero entre tus cuentas.'};
   openModal(`<div class="sheethead"><h2>${isNew?'¿Qué pasó?':'Editar movimiento'}</h2><button class="iconbtn" id="fX" aria-label="Cerrar">${ic('x')}</button></div>
-    ${isNew?situationChoices('gasto'):''}
+    ${isNew?situationChoices(t.type):''}
     <p class="typehelp" id="typeHelp"></p>
-    <div class="amount-entry"><label class="amtbox"><span class="cur" id="lAmt">S/</span><input type="number" inputmode="decimal" step="0.01" min="0" id="fAmt" value="${t.amount}" placeholder="0.00" aria-label="Monto"></label>
+    <div class="amount-entry"><label class="amtbox"><span class="cur" id="lAmt">S/</span><input type="number" inputmode="decimal" step="0.01" min="0" id="fAmt" value="${esc(t.amount??'')}" placeholder="0.00" aria-label="Monto"></label>
       <label class="pay-account"><span id="lPay">Sale de:</span><b id="payName"></b><span aria-hidden="true">▾</span><select id="fAcc" aria-label="Cuenta de pago">${accOpts(t.acc)}</select></label></div>
     <div class="hint" style="margin-bottom:12px" id="dateTxt">${esc(dateTxt(t.date))}</div>
-    <div id="boxCat"><div class="qlabel">¿En qué?</div><div class="chipgrid" id="catChips"></div>
+    <div id="boxCat"><div class="qlabel" id="catQuestion">¿En qué?</div><div class="chipgrid" id="catChips"></div>
       <div id="subWrap" class="hidden"><div class="qlabel small">Detalle <span class="muted">(opcional)</span></div><div class="chipgrid sm" id="subChips"></div></div>
       <div class="budhint hidden" id="budHint"></div>
       <div class="hidden"><select id="fCat"></select><select id="fSub"></select></div></div>
@@ -1182,6 +1193,8 @@ function txForm(t){
       <div class="field" id="boxToAmt"><label>Monto que llegó (<span id="toCur"></span>)</label><input class="input num" type="number" step="0.01" min="0" id="fToAmt" value="${t.toAmount}"><div class="hint">Las cuentas tienen monedas distintas: indica cuánto llegó.</div></div></div>
     <div class="field" id="boxPen"><label>Equivalente en soles</label><input class="input num" type="number" step="0.01" id="fPen" value="${t.pen}"><div class="hint" id="penHint"></div></div>
     <div class="field" style="margin-top:14px"><label>Nota <span class="muted">(opcional)</span></label><input class="input" id="fNote" value="${esc(t.note)}" placeholder="Ej. Menú con mi hija" list="noteList"><datalist id="noteList">${[...new Set(S.tx.slice(0,400).map(x=>x.note).filter(Boolean))].slice(0,60).map(n=>`<option value="${esc(n)}">`).join('')}</datalist></div>
+    <div class="field hidden" id="incomePerson"><label for="fPerson">¿Quién te lo envió? (opcional)</label><select class="input" id="fPerson"><option value="">Sin indicar</option>${(S.people||[]).map(p=>`<option value="${esc(p.id)}"${p.id===t.person?' selected':''}>${esc(p.name)}</option>`).join('')}</select></div>
+    <div class="confirmation hidden" id="incomeWarning" role="status"><b>¿Es una devolución de algo que te debían? Entonces no es ingreso.</b><div class="actions"><button type="button" class="btn" id="fIsRefund">Sí, es devolución</button><button type="button" class="btn" id="fIsIncome">No, es ingreso</button></div></div>
     <details class="more"${isNew?'':' open'}><summary>Cambiar fecha o agregar descripción</summary>
       <div class="field" style="margin-top:8px"><label>Fecha y hora</label><input class="input" type="datetime-local" id="fDate" value="${esc(t.date)}"></div>
       <div class="field"><label>Descripción</label><input class="input" id="fDesc" value="${esc(t.desc)}"></div></details>
@@ -1190,7 +1203,15 @@ function txForm(t){
     <div class="sheetfoot"><div class="confirmation" id="fConfirm" aria-live="polite"></div><button class="btn primary block big" id="fSave">${isNew?'Guardar':'Guardar cambios'}</button>
       <div class="footrow">${isNew?'<button class="linkbtn" id="fMore">Guardar y registrar otro</button>':'<button class="linkbtn danger" id="fDel">Eliminar</button><button class="linkbtn" id="fDup">Duplicar</button>'}</div></div>`,m=>{
     m.classList.add('sheet');
-    const q=s=>m.querySelector(s);let type=t.type;
+    const q=s=>m.querySelector(s);let type=t.type,incomeAcknowledgment='';
+    const incomeKey=()=>JSON.stringify([q('#fNote').value,q('#fPerson').value]);
+    const needsIncomeCheck=()=>type==='ingreso'&&(/devol|me pago|prestamo/.test(financeName(q('#fNote').value))||personRelations(q('#fPerson').value).some(r=>!r.payable&&r.remaining>0.005));
+    function incomeAdvice(){const pending=needsIncomeCheck()&&incomeAcknowledgment!==incomeKey();q('#incomePerson').classList.toggle('hidden',type!=='ingreso');q('#incomeWarning').classList.toggle('hidden',!pending);
+      if(type==='ingreso'){const a=acc(q('#fAcc').value),category=displayLabel(q('#fSub').value||q('#fCat').value);q('#fConfirm').textContent=pending?'Antes de guardar, indica si es ingreso o devolución. Lo escrito se conservará.':`Entra ${money(+q('#fAmt').value||0,a?.currency)} a ${a?.name||'tu cuenta'} · Cuenta como ingreso${category?' ('+category+')':''}.`;}}
+    q('#fNote').oninput=incomeAdvice;q('#fPerson').onchange=incomeAdvice;
+    q('#fIsIncome').onclick=()=>{incomeAcknowledgment=incomeKey();incomeAdvice();q('#fErr').textContent='';};
+    q('#fIsRefund').onclick=()=>{if(!isNew){const latest=S.tx.find(x=>x.id===t.id);if(!latest||stripU(latest)!==originalTx){q('#fErr').textContent='El registro cambió en otro equipo. Cierra y vuelve a abrirlo.';return;}}const draft=collect(false);draft.person=q('#fPerson').value||personFromNote(draft.note)?.id;draft.kind='cobro';draft.type='transfer';
+      const existing=isNew?null:S.tx.find(x=>x.id===t.id);situationForm('cobro',existing,draft);};
     const curOf=id=>acc(id)?.currency||'PEN';
     const nice=c=>c.charAt(0)+c.slice(1).toLowerCase();
     function fillCats(){const cats=S.cats[type]||{};const names=Object.keys(cats).sort();
@@ -1214,6 +1235,7 @@ function txForm(t){
     function budHint(){const el=q('#budHint');const c=q('#fCat').value;const lim=+(S.settings.budgets||{})[c]||0;
       const a=acc(q('#fAcc').value),amt=+q('#fAmt').value||0;
       q('#fConfirm').textContent=type==='gasto'?`Sale ${money(amt,a?.currency)} de ${a?.name||'tu cuenta'}${c?' · '+nice(c):''} · Cuenta como gasto tuyo.`:type==='ingreso'?`Entra ${money(amt,a?.currency)} a ${a?.name||'tu cuenta'} · Cuenta como ingreso.`:`Sale ${money(amt,a?.currency)} de ${a?.name||'tu cuenta'} hacia ${accName(q('#fTo').value)} · No cuenta como gasto ni ingreso.`;
+      incomeAdvice();
       if(type!=='gasto'||!c||!lim){el.classList.add('hidden');return;}
       const mk=monthKey(q('#fDate').value||nowLocal());let spent=0;S.tx.forEach(x=>{if(monthKey(x.date)===mk&&x.id!==t.id)for(const l of expenseParts(x))if(l.cat===c)spent+=l.pen;});
       const left=lim-spent-toPEN(amt,a?.currency);
@@ -1226,10 +1248,12 @@ function txForm(t){
     function sync(){
       m.querySelectorAll('#seg button').forEach(b=>b.classList.toggle('on',b.dataset.t===type));
       q('#typeHelp').textContent=HELP[type];
+      q('#catQuestion').textContent=type==='ingreso'?'¿Qué fue?':'¿En qué?';incomeAdvice();
       const tr=type==='transfer';q('#boxTo').classList.toggle('hidden',!tr);q('#boxCat').classList.toggle('hidden',tr);
       q('#lPay').textContent=type==='ingreso'?'Entra a:':'Sale de:';
       q('#fAcc').setAttribute('aria-label',type==='ingreso'?'Cuenta donde entró el dinero':'Cuenta de pago');
       const choice=q('.current-situation');if(choice)choice.textContent=type==='gasto'?'Gasté':type==='ingreso'?'Recibí dinero':'Moví dinero';
+      m.querySelectorAll('.situations button').forEach(b=>{b.classList.toggle('on',b.dataset.kind===type);b.setAttribute('aria-pressed',b.dataset.kind===type);});
       const c1=curOf(q('#fAcc').value),c2=curOf(q('#fTo').value);
       q('#lAmt').textContent=c1==='USD'?'US$':'S/';q('#toCur').textContent=c2;q('#boxToAmt').classList.toggle('hidden',!tr||c1===c2);
       const showPen=c1!=='PEN';q('#boxPen').classList.toggle('hidden',!showPen);
@@ -1241,7 +1265,7 @@ function txForm(t){
     q('#fAmt').oninput=()=>{sync();};q('#fPen').oninput=()=>q('#fPen').dataset.touched=1;
     if(!isNew&&curOf(t.acc)!=='PEN')q('#fPen').dataset.touched=1;
     q('#fCat').onchange=()=>{if(q('#fCat').value==='__new')addNew('cat');else{t.cat=q('#fCat').value;t.sub='';fillSubs();fillChips();}};
-    q('#fSub').onchange=()=>{if(q('#fSub').value==='__new')addNew('sub');else t.sub=q('#fSub').value;};
+    q('#fSub').onchange=()=>{if(q('#fSub').value==='__new')addNew('sub');else{t.sub=q('#fSub').value;incomeAdvice();}};
     async function addNew(kind){
       const snap={...t,...collect(true)};const prevCat=t.cat;
       const c=q('#fCat').value;
@@ -1249,7 +1273,7 @@ function txForm(t){
       const n=raw&&raw.trim().toUpperCase();
       if(kind==='cat'){if(n){S.cats[type][n]??=[];snap.cat=n;snap.sub='';save();}else{snap.cat=prevCat;snap.sub=t.sub;}}
       else{snap.cat=c;if(n){const l=S.cats[type][c]??=[];if(!l.includes(n))l.push(n);snap.sub=n;save();}else snap.sub=t.sub;}
-      txFormReopen(snap,isNew);
+      txFormReopen(snap,isNew,originalTx);
     }
     function collect(loose){
       const amount=r2(parseFloat(q('#fAmt').value)||0);const c1=curOf(q('#fAcc').value);
@@ -1257,10 +1281,13 @@ function txForm(t){
         cat:'',sub:'',to:null,toAmount:null,pen:loose?q('#fPen').value:(c1==='PEN'?amount:r2(parseFloat(q('#fPen').value)||amount*S.settings.tc))};
       if(type==='transfer'){o.to=q('#fTo').value;const c2=curOf(o.to);o.toAmount=c1===c2?amount:r2(parseFloat(q('#fToAmt').value)||0);if(loose)o.toAmount=q('#fToAmt').value;}
       else{o.cat=q('#fCat').value==='__new'?'':q('#fCat').value;o.sub=q('#fSub').value==='__new'?'':q('#fSub').value;}
+      if(type==='ingreso'){if(q('#fPerson').value)o.person=q('#fPerson').value;else delete o.person;}
       return o;
     }
     function commit(){
       const o=collect(false);const err=q('#fErr');
+      if(!isNew){const latest=S.tx.find(x=>x.id===t.id);if(!latest||stripU(latest)!==originalTx){err.textContent='Este registro cambió o se eliminó en otro equipo. Cierra y vuelve a abrirlo antes de guardar.';return null;}}
+      if(needsIncomeCheck()&&incomeAcknowledgment!==incomeKey()){err.textContent='Indica si es devolución o ingreso antes de guardar.';q('#incomeWarning').scrollIntoView({block:'center'});return null;}
       if(!(o.amount>0)){err.textContent='Escribe el monto.';q('#fAmt').focus();return null;}
       if(!o.acc){err.textContent='Elige una cuenta.';return null;}
       if(o.type==='transfer'){if(o.to===o.acc){err.textContent='Elige dos cuentas distintas.';return null;}if(!(o.toAmount>0)){err.textContent='Indica el monto que llegó.';return null;}}
@@ -1278,20 +1305,22 @@ function txForm(t){
     fillCats();sync();if(isNew&&matchMedia('(min-width:821px)').matches)q('#fAmt').focus();
   });
 }
-function txFormReopen(t,isNew){if(isNew){const o={...t};delete o.id;txFormWith(o);}else txForm(t);}
+function txFormReopen(t,isNew,original){if(isNew){const o={...t};delete o.id;txFormWith(o);}else txForm(t,{},original);}
 function txFormWith(pre){txForm();const m=$('#modalRoot .modal');const q=s=>m.querySelector(s);
   q(`#seg button[data-t="${pre.type}"]`).click();
-  q('#fDate').value=pre.date;q('#fAcc').value=pre.acc;if(pre.to)q('#fTo').value=pre.to;q('#fAmt').value=pre.amount;q('#fNote').value=pre.note||'';q('#fDesc').value=pre.desc||'';
+  q('#fDate').value=pre.date;q('#fAcc').value=pre.acc;if(pre.to)q('#fTo').value=pre.to;q('#fAmt').value=pre.amount;q('#fNote').value=pre.note||'';q('#fDesc').value=pre.desc||'';q('#fPerson').value=pre.person||'';
   if(pre.toAmount)q('#fToAmt').value=pre.toAmount;if(pre.pen&&pre.pen!==''){q('#fPen').value=pre.pen;q('#fPen').dataset.touched=1;}
   if(pre.cat){q('#fCat').value=pre.cat;q('#fCat').dispatchEvent(new Event('change'));if(pre.sub){q('#fSub').value=pre.sub;q('#fSub').dispatchEvent(new Event('change'));}}
   q('#fAmt').dispatchEvent(new Event('input'));}
 
 /* ---------- cuentas: asistente y formulario único ---------- */
 /* ---------- registro por situaciones y personas ---------- */
-const SITUATIONS={gasto:'Gasté',reembolso:'Gasté, pero me lo devuelven',cobro:'Me devolvieron / me pagaron lo que me debían',prestamo_dado:'Presté dinero',pago_tarjeta:'Pagué mi tarjeta',transfer:'Moví dinero entre mis cuentas',prestamo_recibido:'Me prestaron / pedí un adelanto',pago_deuda:'Pagué una deuda o cuota'};
+const SITUATIONS={gasto:'Gasté',reembolso:'Gasté, pero me lo devuelven',cobro:'Me devolvieron / me pagaron lo que me debían',prestamo_dado:'Presté dinero',pago_tarjeta:'Pagué mi tarjeta',transfer:'Moví dinero entre mis cuentas',prestamo_recibido:'Me prestaron / pedí un adelanto',pago_deuda:'Pagué una deuda o cuota',ingreso:'Recibí dinero (sueldo, bono, intereses…)',ajuste:'Mi saldo no cuadra con el banco'};
 const personName=id=>(S.people||[]).find(p=>p.id===id)?.name||'';
-function situationChoices(k){const short={gasto:'Gasté',reembolso:'Me lo devuelven',cobro:'Me devolvieron',prestamo_dado:'Presté dinero',pago_tarjeta:'Pagué mi tarjeta',transfer:'Moví dinero',prestamo_recibido:'Me prestaron',pago_deuda:'Pagué una deuda'};
-  return `<details class="situation-picker"><summary><b class="current-situation">${esc(short[k])}</b><span>Cambiar ▾</span></summary><div class="situations" aria-label="¿Qué pasó?">${Object.entries(SITUATIONS).map(([id,name])=>`<button type="button" class="${id===k?'on':''}" aria-pressed="${id===k}" data-act="situation" data-kind="${id}">${name}</button>`).join('')}</div></details>`;}
+function situationChoices(k){const short={gasto:'Gasté',reembolso:'Me lo devuelven',cobro:'Me devolvieron',prestamo_dado:'Presté dinero',pago_tarjeta:'Pagué mi tarjeta',transfer:'Moví dinero',prestamo_recibido:'Me prestaron',pago_deuda:'Pagué una deuda',ingreso:'Recibí dinero',ajuste:'El saldo no cuadra'};
+  return `<details class="situation-picker"><summary><b class="current-situation">${esc(short[k])}</b><span>Cambiar ▾</span></summary><div class="situations" aria-label="¿Qué pasó?">${Object.entries(SITUATIONS).filter(([id])=>id!=='ajuste').map(([id,name])=>`<button type="button" class="${id===k?'on':''}" aria-pressed="${id===k}" data-act="situation" data-kind="${id}">${name}</button>`).join('')}</div><details class="more situation-more"><summary>Más…</summary><div class="situations"><button type="button" data-act="situation" data-kind="ajuste">El saldo no cuadra</button></div></details></details>`;}
+function personFromNote(note){const text=financeName(note),people=S.people||[];const full=people.filter(p=>text.includes(financeName(p.name)));if(full.length===1)return full[0];
+  const first=people.filter(p=>{const word=financeName(p.name).split(/\s+/)[0];return word.length>=3&&text.split(/[^a-z0-9]+/).includes(word);});return first.length===1?first[0]:null;}
 function personRelations(id,exclude){
   const list=S.tx.filter(t=>t.person===id&&t.id!==exclude),roots=list.filter(t=>['reembolso','prestamo_dado','prestamo_recibido'].includes(txKind(t)));
   return roots.map(t=>{const payable=txKind(t)==='prestamo_recibido',cur=txCurrency(t);
@@ -1308,7 +1337,8 @@ function relationLabel(r){return r.payable?'Préstamo que debes':r.kind==='reemb
 function personCard(p,rs){return `<section class="card" style="margin-top:14px"><div class="cardhead"><h3>${esc(p.name)}${p.archived?' · archivada':''}</h3><button class="linkbtn" data-act="personDetail" data-id="${p.id}">Ver detalle</button></div>${['PEN','USD'].map(cur=>{
   const rr=rs.filter(r=>r.currency===cur),tot=personAmounts(rr),get=tot.receivable,owe=tot.payable,net=r2(get-owe);
   const total=net>0.005?`En total, te debe ${money(net,cur)}`:net< -0.005?`En total, le debes ${money(-net,cur)}`:'En total, están a mano.';
-  return rr.length?`<p>Te debe <b>${money(get,cur)}</b> · Le debes <b>${money(owe,cur)}</b><br><span class="hint">${total}</span></p>`:'';
+  const sides=[get>0.005?`Te debe <b>${money(get,cur)}</b>`:'',owe>0.005?`Le debes <b>${money(owe,cur)}</b>`:''].filter(Boolean).join(' · ');
+  return rr.length?`<p>${sides||'Sin pendientes.'}<br><span class="hint">${total}</span></p>`:'';
 }).join('')||'<p class="muted">Sin pendientes.</p>'}${rs.some(r=>r.remaining>0.01&&r.due&&r.due<todayStr())?'<p class="neg">Tiene una devolución vencida.</p>':''}</section>`;}
 function vPeople(){const people=(S.people||[]).map(p=>({p,rs:personRelations(p.id)}));
   const pending=people.filter(x=>x.rs.some(r=>Math.abs(r.remaining)>0.005)),settled=people.filter(x=>!x.rs.some(r=>Math.abs(r.remaining)>0.005));
@@ -1323,10 +1353,11 @@ function personDetail(id){const p=(S.people||[]).find(p=>p.id===id);if(!p)return
   <h3>Movimientos</h3>${S.tx.filter(t=>t.person===id).map(txRow).join('')||'<p class="muted">Sin movimientos.</p>'}<div class="actions"><button class="btn" data-act="person" data-id="${id}">Editar persona</button></div>`,m=>{m.classList.add('sheet');m.querySelector('#pClose').onclick=closeModal;});}
 function personForm(p){openModal(`<h2>${p?'Editar':'Agregar'} persona o empresa</h2><div class="field"><label for="pName">Nombre</label><input class="input" id="pName" value="${esc(p?.name)}"></div><div class="field"><label for="pKind">Es una</label><select class="input" id="pKind"><option value="persona">Persona</option><option value="empresa">Empresa</option><option value="banco">Banco</option></select></div><div class="field"><label for="pNote">Nota (opcional)</label><input class="input" id="pNote" value="${esc(p?.note)}"></div>${p?`<label><input id="pArch" type="checkbox" ${p.archived?'checked':''}> Archivar</label>`:''}<div class="err" id="pErr"></div><div class="actions"><button class="btn" id="pCancel">Cancelar</button><button class="btn primary" id="pSave">Guardar</button></div>`,m=>{const q=s=>m.querySelector(s);q('#pKind').value=p?.kind||'persona';q('#pCancel').onclick=closeModal;q('#pSave').onclick=()=>{const name=q('#pName').value.trim();if(!name)return q('#pErr').textContent='Escribe un nombre.';if((S.people||[]).some(x=>x.id!==p?.id&&x.name.toLocaleLowerCase()===name.toLocaleLowerCase()))return q('#pErr').textContent='Ya existe ese nombre.';
     const o={...p,id:p?.id||uid(),name,kind:q('#pKind').value,note:q('#pNote').value.trim(),archived:!!q('#pArch')?.checked};S.people??=[];if(p)S.people[S.people.findIndex(x=>x.id===p.id)]=o;else S.people.push(o);save();closeModal();render();};});}
-const TX_PRESENTATION={reembolso:{name:'Reembolso por cobrar',icon:'clock'},cobro:{name:'Cobro',icon:'download'},prestamo_dado:{name:'Préstamo dado',icon:'loanOut'},prestamo_recibido:{name:'Préstamo recibido',icon:'loanIn'},pago_tarjeta:{name:'Pago de tarjeta',icon:'card'},pago_deuda:{name:'Pago de deuda',icon:'hand'}};
+const TX_PRESENTATION={reembolso:{name:'Reembolso por cobrar',icon:'clock'},cobro:{name:'Cobro',icon:'download'},prestamo_dado:{name:'Préstamo dado',icon:'loanOut'},prestamo_recibido:{name:'Préstamo recibido',icon:'loanIn'},pago_tarjeta:{name:'Pago de tarjeta',icon:'card'},pago_deuda:{name:'Pago de deuda',icon:'hand'},ajuste:{name:'Ajuste de saldo',icon:'wallet'}};
 function situationRow(t){const k=txKind(t),view=TX_PRESENTATION[k]||{name:'Movimiento',icon:'list'};
   const pay=k==='pago_tarjeta'?{minimo:'Pago mínimo',total:'Total del mes',parcial:'Pago parcial'}[t.cardPay]:'';
-  const detail=[pay,personName(t.person),accName(t.acc),t.to?'→ '+accName(t.to):'',t.note].filter(Boolean).join(' · ');
+  const direction=k==='ajuste'?(LIAB.has(acc(t.acc)?.type)?t.amount<0?'Baja la deuda':'Sube la deuda':t.amount<0?'Sube el saldo':'Baja el saldo'):'';
+  const detail=[pay,direction,personName(t.person),accName(t.acc),t.to?'→ '+accName(t.to):'',t.note].filter(Boolean).join(' · ');
   return `<div class="tx situation tx-${esc(k)}" data-act="editTx" data-id="${t.id}"><div class="dot">${ic(view.icon)}</div><div class="mid"><div class="t1">${view.name}</div><div class="t2">${esc(detail)}</div></div><div class="amt num">${txAmount(t)}</div></div>`;}
 const financeName=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
 const isFinance=s=>/\b(finanzas?|financier[oa]s?)\b/.test(financeName(s));
@@ -1378,11 +1409,12 @@ function loanOperationForm(kind,existing,pre={}){
       if(borrowing){const name=x.person?.name||q('#sPerson').value.trim()||'esa persona';q('#sPersonNew').classList.toggle('hidden',!!x.person||!q('#sPerson').value.trim());
         q('#sConfirm').textContent=`Entra ${money(x.total,cur)} a ${x.a?.name||'tu cuenta'} · Le deberás ${money(x.total,cur)} a ${name}`+(x.fee?` · La comisión de ${money(x.fee,cur)} cuenta como gasto de Finanzas · En tu cuenta quedan ${money(x.total-x.fee,cur)} del préstamo.`:'.');
       }else{const info=x.d?.info;q('#sDebtInfo').textContent=x.d?`Pendiente: ${money(x.d.remaining,x.d.currency)}${info?.ok?` · Vence ${fmtD(info.nextDue)}`:''}`:'';q('#sQuotaKinds').classList.toggle('hidden',!info?.ok);q('#sQuota').textContent=info?.ok?`Cuota (${money(info.cuota,cur)})`:'Cuota';
-        let msg=`Sale ${money(x.total,cur)} de ${x.a?.name||'tu cuenta'} · Tu deuda con ${x.d?.name||'quien te prestó'} baja ${money(x.principal,cur)}`;
+        const reduction=Math.max(0,Math.min(x.principal,x.d?.remaining||0));
+        let msg=`Sale ${money(x.total,cur)} de ${x.a?.name||'tu cuenta'} · Tu deuda con ${x.d?.name||'quien te prestó'} baja ${money(reduction,cur)}`;
         if(x.fee+otherInterest)msg+=` · ${money(x.fee+otherInterest,cur)} de interés cuenta como gasto de Finanzas`;
-        if(x.d&&Math.abs(x.d.remaining-x.principal)<0.005)msg+=' · Con esto terminas de pagar';
+        if(x.d&&x.principal>=x.d.remaining-0.005)msg+=' · Con esto terminas de pagar';
         const over=!!x.d&&x.principal>x.d.remaining+0.005;q('#sOverpay').classList.toggle('hidden',!over);
-        if(over)msg+=` · Pagas ${money(x.principal-x.d.remaining,cur)} por encima de lo pendiente; quedará como saldo a favor. Confírmalo para guardar`;
+        if(over)msg+=` · Pagas ${money(x.principal-x.d.remaining,cur)} de más; quedará como saldo a favor. Confírmalo para guardar`;
         const key=JSON.stringify([q('#sDebt').value,x.d?.remaining,x.total,x.fee,q('#sAcc').value]);if(key!==approvalKey){q('#sOverpayOk').checked=false;approvalKey=key;}
         q('#sConfirm').textContent=msg+'.';
       }
@@ -1410,13 +1442,89 @@ function loanOperationForm(kind,existing,pre={}){
       if(isNew)S.tx.push(o);else S.tx[i]=o;sortTx();save();prefs.lastAcc=x.a.id;lsSet(PREF_KEY,JSON.stringify(prefs));closeModal();render();toast('Guardado');};
     if(!isNew)q('#sDelete').onclick=async()=>{if(S.tx.some(z=>z.rel===t.id))return q('#sErr').textContent='Primero elimina los pagos vinculados a este préstamo.';
       if(!await ask({title:'¿Eliminar este registro?',text:'Se actualizarán los saldos. Podrás deshacerlo.',ok:'Eliminar',danger:true})){loanOperationForm(kind,existing);return;}
-      const old=S.tx.find(z=>z.id===t.id);S.tx=S.tx.filter(z=>z.id!==t.id);save();closeModal();render();toast('Registro eliminado',6000,{label:'Deshacer',fn:()=>{if(old){S.tx.push(old);sortTx();save();render();}}});};
+      const old=S.tx.find(z=>z.id===t.id);if(!old||stripU(old)!==originalRecord||S.tx.some(z=>z.rel===t.id)){closeModal();toast('El registro cambió o recibió pagos. Revísalo de nuevo.');return;}
+      const owner=KEY;S.tx=S.tx.filter(z=>z.id!==t.id);save();closeModal();render();toast('Registro eliminado',6000,{label:'Deshacer',fn:()=>{if(S&&KEY===owner&&!S.tx.some(z=>z.id===t.id)){S.tx.push(old);sortTx();save();render();}}});};
     if(!borrowing)fillAccounts();update();
   });
 }
+function checkedLabel(a){if(!a.checkedAt||!Number.isFinite(Date.parse(a.checkedAt)))return '⚠ Nunca cuadrada';
+  const days=Math.max(0,daysBetween(a.checkedAt.slice(0,10),todayStr()));return days>30?`⚠ Sin cuadrar hace ${days} días`:days===0?'✓ Cuadrada hoy':`✓ Cuadrada hace ${days} ${days===1?'día':'días'}`;}
+const touchesAccount=(t,id)=>t.acc===id||t.to===id||(t.legs||[]).some(l=>l.acc===id);
+function reconcileCandidates(id){const today=todayStr(),all=S.tx.filter(t=>touchesAccount(t,id)),duplicates=new Set(),groups=new Map();
+  for(const t of all){const effect=r2(accountParts(t).filter(l=>l.acc===id).reduce((s,l)=>s+l.amount,0)),key=txKind(t)+'|'+effect.toFixed(2);if(!groups.has(key))groups.set(key,[]);groups.get(key).push(t);}
+  for(const group of groups.values()){group.sort((a,b)=>a.date.localeCompare(b.date));for(let i=1;i<group.length;i++)if(Math.abs(daysBetween(group[i-1].date.slice(0,10),group[i].date.slice(0,10)))<=1){duplicates.add(group[i-1].id);duplicates.add(group[i].id);}}
+  return all.filter(t=>t.date.slice(0,10)>=addDays(today,-7)||duplicates.has(t.id)).sort((a,b)=>b.date.localeCompare(a.date)).map(t=>({t,duplicate:duplicates.has(t.id),future:t.date.slice(0,10)>today}));
+}
+function resumeReconciliation(state,openChild){openChild();const root=$('#modalRoot');let timer;
+  const observer=new MutationObserver(()=>{clearTimeout(timer);timer=setTimeout(()=>{if(!root.firstElementChild){observer.disconnect();if(S)reconcileForm(state);}},0);});
+  observer.observe(root,{childList:true});
+}
+async function deleteReconcileMovement(id,state){const old=S.tx.find(t=>t.id===id),owner=KEY;if(!old)return reconcileForm(state);
+  if(S.tx.some(t=>t.rel===id)){await ask({title:'Este registro tiene pagos vinculados',text:'Revisa primero esos pagos. No se borró nada.',ok:'Entendido'});reconcileForm(state);return;}
+  const snapshot=stripU(old),ok=await ask({title:'¿Borrar este movimiento?',text:'Cambiará el saldo. Podrás deshacerlo.',ok:'Borrar',danger:true});
+  if(!S||KEY!==owner)return;const current=S.tx.find(t=>t.id===id);
+  if(ok&&current&&stripU(current)===snapshot&&!S.tx.some(t=>t.rel===id)){S.tx=S.tx.filter(t=>t.id!==id);save();render();reconcileForm(state);
+    toast('Movimiento eliminado',6000,{label:'Deshacer',fn:()=>{if(S&&KEY===owner&&!S.tx.some(t=>t.id===id)){S.tx.push(old);sortTx();save();render();reconcileForm(state);}}});
+  }else{reconcileForm(state);if(ok)toast('El movimiento cambió en otro equipo. Revísalo de nuevo.');}
+}
+function reconciliationIncomeCategory(){const cats=S.cats.ingreso,cat=Object.keys(cats).find(c=>/^interes/.test(financeName(c)));
+  if(cat)return {cat,sub:''};for(const [name,subs] of Object.entries(cats)){const sub=subs.find(s=>/^interes/.test(financeName(s)));if(sub)return {cat:name,sub};}
+  cats.Intereses??=[];return {cat:'Intereses',sub:''};}
+function reconcileForm(state={}){if(!S)return;const active=S.accounts.filter(a=>!a.archived||a.id===state.accId),first=active.find(a=>a.id===state.accId)||active[0];
+  if(!first){toast('Primero agrega una cuenta.');return;}state.accId=first.id;let shownBalance=null,shownCurrency=first.currency;
+  openModal(`<div class="sheethead"><h2>El saldo no cuadra</h2><button class="iconbtn" id="rClose" aria-label="Cerrar">${ic('x')}</button></div><div class="field"><label for="rAcc">¿Qué cuenta?</label><select class="input" id="rAcc">${active.map(a=>`<option value="${esc(a.id)}"${a.id===state.accId?' selected':''}>${esc(a.name)} (${a.currency})</option>`).join('')}</select></div>
+    <div class="field"><label for="rReal" id="rRealLabel"></label><input class="input num" id="rReal" type="number" inputmode="decimal" step="0.01" value="${esc(state.real??'')}" placeholder="0.00"></div><button class="btn" id="rCheck">Ver diferencia</button>
+    <section class="hidden" id="rResults"><div class="confirmation" id="rDifference" aria-live="polite"></div><div id="rPerfect" class="hidden"><p>✓ Cuadra perfecto.</p><button class="btn primary" id="rMark">Guardar comprobación</button></div>
+    <div id="rMismatch"><h3>¿Será alguno de estos?</h3><p class="hint">Revisa los últimos 7 días, posibles duplicados y movimientos con fecha futura. Edita o borra para recalcular la diferencia.</p><div id="rCandidates"></div><button class="btn block" id="rNone">No encontré la causa · Registrar diferencia</button></div></section>
+    <section id="rResolve" class="hidden"><div class="field"><label for="rMode">Registrar la diferencia como…</label><select class="input" id="rMode"></select></div><div class="field hidden" id="rCatBox"><label for="rCat">Categoría del gasto olvidado</label><select class="input" id="rCat">${Object.keys(S.cats.gasto).map(c=>`<option value="${esc(c)}">${esc(displayLabel(c))}</option>`).join('')}</select></div>
+    <div class="sheetfoot"><div class="confirmation" id="rConfirm" aria-live="polite"></div><button class="btn primary block big" id="rSave">Guardar diferencia y cuadrar</button></div></section><div class="err" id="rErr" role="alert"></div>`,m=>{
+    m.classList.add('sheet');const q=s=>m.querySelector(s);if(state.cat)q('#rCat').value=state.cat;
+    function values(){const a=acc(q('#rAcc').value),input=q('#rReal').value,real=input===''?NaN:r2(+input),balance=a?balances()[a.id]||0:0,actual=a&&LIAB.has(a.type)?-real:real;
+      return {a,input,real,actual,balance,delta:r2(actual-balance)};}
+    function update(){const v=values();state.accId=q('#rAcc').value;state.real=q('#rReal').value;state.mode=q('#rMode').value||state.mode;state.cat=q('#rCat').value;
+      q('#rRealLabel').textContent=v.a&&LIAB.has(v.a.type)?'¿Cuánto debes hoy según tu banco?':'¿Cuánto dice tu banco hoy?';if(v.a&&LIAB.has(v.a.type))q('#rReal').min=0;else q('#rReal').removeAttribute('min');
+      const valid=!!v.a&&Number.isFinite(v.real)&&(!LIAB.has(v.a.type)||v.real>=0),show=!!state.checked&&valid;q('#rResults').classList.toggle('hidden',!show);q('#rResolve').classList.toggle('hidden',!show||!state.resolve||Math.abs(v.delta)<0.01);
+      if(!show)return;shownBalance=v.balance;shownCurrency=v.a.currency;
+      const displayed=LIAB.has(v.a.type)?-v.balance:v.balance;
+      const direction=LIAB.has(v.a.type)?v.delta<0?'más de deuda':'menos de deuda':v.delta<0?'de menos en el saldo':'de más en el saldo';
+      q('#rDifference').textContent=`La app dice ${displayed<0?'−':''}${money(Math.abs(displayed),v.a.currency)} · Tu banco dice ${v.real<0?'−':''}${money(Math.abs(v.real),v.a.currency)}`+(Math.abs(v.delta)<0.01?' · Cuadra perfecto.':` · Diferencia: ${money(Math.abs(v.delta),v.a.currency)} ${direction}.`);
+      const perfect=Math.abs(v.delta)<0.01;q('#rPerfect').classList.toggle('hidden',!perfect);q('#rMismatch').classList.toggle('hidden',perfect);
+      q('#rCandidates').innerHTML=reconcileCandidates(v.a.id).map(({t,duplicate,future})=>{const effect=r2(accountParts(t).filter(l=>l.acc===v.a.id).reduce((s,l)=>s+l.amount,0));return `<article class="reconcile-item"><b>${esc(t.note||TX_PRESENTATION[txKind(t)]?.name||displayLabel(t.sub)||displayLabel(t.cat)||'Movimiento')}</b><div class="hint">${esc(fmtD(t.date.slice(0,10)))} · ${effect<0?'−':'+'}${money(Math.abs(effect),v.a.currency)}${duplicate?' · Posible duplicado':''}${future?' · Fecha futura':''}</div><div class="actions"><button class="btn" data-r-edit="${esc(t.id)}">Editar</button><button class="btn" data-r-delete="${esc(t.id)}">Borrar</button></div></article>`;}).join('')||'<p class="muted">No hay movimientos para revisar en esta cuenta.</p>';
+      const modes=v.delta<0?[['commission','Comisión / ITF'],['expense','Gasto olvidado'],['adjust','Otro ajuste']]:[['interest','Interés ganado'],['adjust','Otro ajuste']];
+      const mode=modes.some(([k])=>k===state.mode)?state.mode:modes[0][0];q('#rMode').innerHTML=modes.map(([k,label])=>`<option value="${k}"${k===mode?' selected':''}>${label}</option>`).join('');state.mode=mode;q('#rCatBox').classList.toggle('hidden',mode!=='expense');
+      q('#rConfirm').textContent=`${mode==='adjust'?'Ajustarás':mode==='interest'?'Registrarás como ingreso': 'Registrarás como gasto'} ${money(Math.abs(v.delta),v.a.currency)} para que ${v.a.name} quede con el saldo de tu banco.`+(mode==='adjust'?' No cuenta como gasto ni ingreso.':'');
+    }
+    function safeValues(){const v=values();if(!v.a||!Number.isFinite(v.real)||LIAB.has(v.a.type)&&v.real<0){q('#rErr').textContent='Elige una cuenta y escribe el saldo real.';return null;}
+      if(shownBalance===null||Math.abs(v.balance-shownBalance)>0.005||v.a.currency!==shownCurrency){update();q('#rErr').textContent='El saldo cambió al sincronizar. Revisa la diferencia actualizada antes de guardar.';return null;}return v;}
+    function mark(a){const i=S.accounts.findIndex(x=>x.id===a.id);S.accounts[i]={...S.accounts[i],checkedAt:new Date().toISOString()};save();closeModal();render();toast('Saldo cuadrado');}
+    q('#rClose').onclick=closeModal;q('#rAcc').onchange=()=>{state.checked=false;state.resolve=false;q('#rReal').value='';update();};q('#rReal').oninput=()=>{state.resolve=false;update();};
+    q('#rCheck').onclick=()=>{state.checked=true;q('#rErr').textContent='';update();if(q('#rReal').value==='')q('#rErr').textContent='Escribe el saldo real antes de comparar.';};
+    q('#rNone').onclick=()=>{state.resolve=true;update();q('#rResolve').scrollIntoView({block:'start'});};q('#rMode').onchange=update;q('#rCat').onchange=update;
+    q('#rCandidates').onclick=e=>{const edit=e.target.closest('[data-r-edit]'),del=e.target.closest('[data-r-delete]');if(!edit&&!del)return;e.stopPropagation();state.resolve=false;
+      if(edit)resumeReconciliation(state,()=>doAct({act:'editTx',id:edit.dataset.rEdit}));else deleteReconcileMovement(del.dataset.rDelete,state);};
+    q('#rMark').onclick=()=>{const v=safeValues();if(v&&Math.abs(v.delta)<0.01)mark(v.a);};
+    q('#rSave').onclick=()=>{const v=safeValues();if(!v||!state.resolve)return;if(Math.abs(v.delta)<0.01){mark(v.a);return;}
+      const mode=q('#rMode').value;if(v.delta>0&&!['interest','adjust'].includes(mode)||v.delta<0&&!['commission','expense','adjust'].includes(mode)){update();return;}
+      if(mode==='expense'&&!(q('#rCat').value in S.cats.gasto)){q('#rErr').textContent='Elige una categoría actual para el gasto olvidado.';return;}
+      const kind=mode==='adjust'?'ajuste':mode==='interest'?'ingreso':'gasto',labels=mode==='commission'?financeCategory('commission'):mode==='interest'?reconciliationIncomeCategory():mode==='expense'?{cat:q('#rCat').value,sub:''}:{};
+      // amount = -delta permite que la versión anterior interprete los ajustes positivos y negativos.
+      const amount=kind==='ajuste'?r2(-v.delta):Math.abs(v.delta),o={id:uid(),kind,type:kind==='ajuste'?'transfer':kind,date:nowLocal(),acc:v.a.id,currency:v.a.currency,amount,pen:toPEN(amount,v.a.currency),...labels,note:mode==='adjust'?'Ajuste de saldo':mode==='interest'?'Interés ganado al cuadrar saldo':mode==='expense'?'Gasto olvidado al cuadrar saldo':'Comisión / ITF al cuadrar saldo'};
+      S.tx.push(o);sortTx();mark(v.a);};
+    update();
+  });
+}
+function adjustmentForm(t){const original=stripU(t),a=acc(t.acc);if(!a){toast('No se encuentra la cuenta de este ajuste.');return;}
+  openModal(`<div class="sheethead"><h2>Ajuste de saldo</h2><button class="iconbtn" id="sClose" aria-label="Cerrar">${ic('x')}</button></div><p>${esc(a.name)}</p><div class="field"><label for="aDirection">¿Qué cambió?</label><select class="input" id="aDirection"><option value="down">${LIAB.has(a.type)?'La deuda subió':'El saldo bajó'}</option><option value="up">${LIAB.has(a.type)?'La deuda bajó':'El saldo subió'}</option></select></div><label class="amtbox"><span class="cur">${a.currency==='USD'?'US$':'S/'}</span><input id="sAmt" type="number" inputmode="decimal" step="0.01" min="0" value="${Math.abs(t.amount)}" aria-label="Monto"></label><div class="field"><label for="sNote">Nota</label><input class="input" id="sNote" value="${esc(t.note)}"></div><div class="field"><label for="sDate">Fecha y hora</label><input class="input" id="sDate" type="datetime-local" value="${esc(t.date)}"></div><div class="err" id="sErr"></div><div class="sheetfoot"><div class="confirmation" id="sConfirm">Este ajuste no cuenta como gasto ni ingreso.</div><button class="btn primary block big" id="sSave">Guardar cambios</button></div>`,m=>{
+    m.classList.add('sheet');const q=s=>m.querySelector(s);q('#aDirection').value=t.amount<0?'up':'down';q('#sClose').onclick=closeModal;q('#sSave').onclick=()=>{
+      const i=S.tx.findIndex(x=>x.id===t.id),n=r2(+q('#sAmt').value);if(i<0||stripU(S.tx[i])!==original){q('#sErr').textContent='El ajuste cambió en otro equipo. Cierra y vuelve a abrirlo.';return;}
+      if(!Number.isFinite(n)||n<=0){q('#sErr').textContent='Escribe un monto mayor que cero.';return;}const amount=q('#aDirection').value==='up'?-n:n;
+      S.tx[i]={...t,amount,pen:toPEN(amount,a.currency),note:q('#sNote').value.trim(),date:q('#sDate').value||t.date};sortTx();save();closeModal();render();toast('Ajuste guardado');};});
+}
 function situationForm(kind,existing,pre={}){
+  if(kind==='ingreso'){txForm(existing||undefined,pre.type?pre:{...pre,type:'ingreso',kind:'ingreso'});return;}
+  if(kind==='ajuste'){if(existing)adjustmentForm(existing);else reconcileForm({accId:pre.acc});return;}
   if(['prestamo_recibido','pago_deuda'].includes(kind)){loanOperationForm(kind,existing,pre);return;}
-  const t={date:nowLocal(),amount:'',note:'',...pre,...existing},isNew=!existing;
+  const original=stripU(existing),t={date:nowLocal(),amount:'',note:'',...existing,...pre},isNew=!existing;
   const personMode=['reembolso','cobro','prestamo_dado'].includes(kind),transfer=['transfer','pago_tarjeta'].includes(kind),isCardPay=kind==='pago_tarjeta';
   const active=S.accounts.filter(a=>(!a.archived||[t.acc,t.to].includes(a.id))&&!['porcobrar','porpagar'].includes(a.type));
   const sources=active.filter(a=>kind!=='cobro'||a.type!=='tarjeta').filter(a=>!isCardPay||a.type!=='tarjeta');
@@ -1475,7 +1583,10 @@ function situationForm(kind,existing,pre={}){
       if(!isNew&&personMode&&kind!=='cobro'){const paid=S.tx.filter(x=>x.rel===t.id);if(paid.some(x=>x.person!==p?.id||txCurrency(x)!==a.currency)||paid.reduce((s,x)=>s+x.amount,0)>amount+0.005)return fail('Este registro ya tiene devoluciones. Conserva la persona y moneda, y un monto que cubra lo devuelto.');}
       if(isCardPay&&cardPay==='total'&&Math.abs(toAmount-(cardInfo(b,todayStr(),existing?.id).pending||0))>0.01)return fail('El monto cambió. Pulsa Total del mes otra vez o elige Otro monto.');
       let person=p;if(personMode&&!person){person={id:uid(),name:q('#sPerson').value.trim(),kind:q('#sPersonKind').value,note:'',archived:false};(S.people??=[]).push(person);}
-      const o={...existing,id:t.id||uid(),kind,type:'transfer',date:q('#sDate').value||nowLocal(),amount,currency:a.currency,acc:a.id,note:q('#sNote').value.trim(),pen:toPEN(amount,a.currency)};
+      if(existing){const latest=S.tx.find(x=>x.id===existing.id);if(!latest||stripU(latest)!==original)return fail('Este registro cambió o se eliminó en otro equipo. Cierra y vuelve a abrirlo antes de guardar.');}
+      const pen=t.acc===a.id&&Number(t.amount)===amount&&Number.isFinite(t.pen)?t.pen:toPEN(amount,a.currency);
+      const o={...t,id:t.id||uid(),kind,type:'transfer',date:q('#sDate').value||nowLocal(),amount,currency:a.currency,acc:a.id,note:q('#sNote').value.trim(),pen};
+      if(kind==='cobro'){delete o.cat;delete o.sub;}
       if(personMode)o.person=person.id;if(transfer){o.to=b.id;o.toAmount=toAmount;}if(kind==='cobro')o.rel=r.id;if(isCardPay)o.cardPay=cardPay;if(kind==='prestamo_dado')o.dueDate=q('#sDue').value||null;
       if(isNew)S.tx.push(o);else S.tx[S.tx.findIndex(x=>x.id===t.id)]=o;sortTx();save();prefs.lastAcc=a.id;lsSet(PREF_KEY,JSON.stringify(prefs));closeModal();render();toast('Guardado');};
     if(!isNew)q('#sDelete').onclick=async()=>{if(S.tx.some(x=>x.rel===t.id))return q('#sErr').textContent='Primero elimina las devoluciones vinculadas a este registro.';if(!await ask({title:'¿Eliminar este registro?',text:'Se actualizarán los saldos de la cuenta y la persona.',ok:'Eliminar',danger:true})){situationForm(kind,existing);return;}S.tx=S.tx.filter(x=>x.id!==t.id);save();closeModal();render();};
@@ -1510,7 +1621,7 @@ function accountForm(kind,a){
     <div class="field"><label>Nombre</label><input class="input" id="aName" value="${esc(a.name)}" placeholder="${esc(K.ex.replace('Ej.: ','').split(',')[0])}"></div>
     ${kind==='dinero'?`<div class="qlabel small">Tipo</div><div class="chipgrid sm" id="aTypes">${['banco','efectivo','ahorro','inversion'].map(k=>`<button type="button" data-t="${k}" class="${a.type===k?'on':''}">${TYPES[k]}</button>`).join('')}</div>`:''}
     ${isNew?`<div class="field" style="margin-top:12px"><label>${amtLabel}</label><input class="input num" id="aBal" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0.00">${kind==='tarjeta'?'<div class="hint">El total que aparece como deuda en tu app del banco. Si no debes nada, déjalo en 0.</div>':''}</div>`
-      :`<div class="curbal"><span>${kind==='dinero'||kind==='tedeben'?'Saldo actual':'Debes hoy'}</span><b class="num">${money(Math.abs(bal),a.currency)}</b></div>`}
+      :`<div class="curbal"><span>${kind==='dinero'||kind==='tedeben'?'Saldo actual':'Debes hoy'}</span><b class="num">${money(Math.abs(bal),a.currency)}</b></div><p class="hint">${checkedLabel(a)}</p><button type="button" class="btn" id="aCheck">Cuadrar</button>`}
     ${kind==='tarjeta'?`<div class="field"><label>Línea de crédito</label><input class="input num" id="dLim" type="number" inputmode="decimal" step="0.01" min="0" value="${esc(d.limit||'')}" placeholder="Ej. 5000"><div class="hint">El máximo que el banco te deja gastar.</div></div>
       <div class="field"><label for="dMin">Pago mínimo del estado de cuenta (opcional)</label><input class="input num" id="dMin" type="number" inputmode="decimal" step="0.01" min="0" value="${esc(d.minimum||'')}"><div class="hint">Escribe el monto que indica tu banco; actualízalo cada mes.</div></div>
       <div class="two"><div class="field"><label>Día de corte</label><input class="input" id="dCut" type="number" inputmode="numeric" min="1" max="31" value="${esc(d.cutDay||'')}" placeholder="1–31"><div class="hint">Cuando se cierra tu estado de cuenta.</div></div>
@@ -1530,6 +1641,7 @@ function accountForm(kind,a){
       ${isNew?'':'<div class="footrow"><button class="linkbtn" id="aSee">Ver sus movimientos</button><button class="linkbtn danger" id="aDel">Eliminar</button></div>'}</div>`,m=>{
     m.classList.add('sheet');const q=s=>m.querySelector(s);
     q('#aX').onclick=closeModal;
+    if(q('#aCheck'))q('#aCheck').onclick=()=>reconcileForm({accId:a.id});
     if(q('#aTypes'))q('#aTypes').onclick=e=>{const b=e.target.closest('button');if(!b)return;a.type=b.dataset.t;m.querySelectorAll('#aTypes button').forEach(x=>x.classList.toggle('on',x===b));};
     q('#aSave').onclick=()=>{
       const err=q('#aErr');const name=q('#aName').value.trim().toUpperCase();
@@ -1776,6 +1888,7 @@ async function doAct(d){
     case 'hideSetup':S.settings.hideSetup=true;save();render();toast('Guía oculta. Puedes volver a verla desde Más.');break;
     case 'showSetup':S.settings.hideSetup=false;save();ui.tab='resumen';render();break;
     case 'newTx':if(!S.accounts.length){toast('Primero crea una cuenta');break;}txForm();break;
+    case 'reconcile':reconcileForm({accId:d.id});break;
     case 'situation':if(d.kind==='gasto')txForm();else situationForm(d.kind,null,{person:d.person,rel:d.rel,to:d.to,amount:d.amt});break;
     case 'editTx':{const t=S.tx.find(t=>t.id===d.id);if(t.kind&&!['gasto','ingreso','transfer'].includes(t.kind))situationForm(t.kind,t);else txForm(t);break;}
     case 'person':personForm((S.people||[]).find(p=>p.id===d.id));break;
