@@ -444,6 +444,7 @@ details.dmore summary::-webkit-details-marker{display:none}
   .settings .row .txt{min-width:0;flex-basis:100%}
   .toast{bottom:96px}
 }
+.favorite-chips{display:flex;gap:8px;overflow-x:auto;max-width:100%;padding:4px 0 10px;flex-shrink:0}.favorite-chips .btn{flex-shrink:0;white-space:nowrap;min-height:44px}.favorite-label{display:flex;align-items:center;gap:8px;min-height:44px}.favorite-label input{width:20px;height:20px;flex-shrink:0}.favorite-options{padding:12px 0}.favorite-card{margin-top:12px}.favorite-card .actions{flex-wrap:wrap}#incomeChoices{flex-wrap:wrap}#incomeChoices .btn{flex:1;min-height:44px}
 </style>
 </head>
 <body>
@@ -641,7 +642,7 @@ function stamp(){
   takeSnap();return ch;
 }
 function mergeStates(L,R){
-  const out={...L};const del={...(R.del||{})};for(const [k,v] of Object.entries(L.del||{}))del[k]=Math.max(v,del[k]||0);
+  const out={...R,...L};const del={...(R.del||{})};for(const [k,v] of Object.entries(L.del||{}))del[k]=Math.max(v,del[k]||0);
   for(const c of COLS){const m=new Map(),order=[];
     for(const e of (L[c]||[])){m.set(e.id,e);order.push(e.id);}
     for(const e of (R[c]||[])){const x=m.get(e.id);if(!x){m.set(e.id,e);order.push(e.id);}else{
@@ -893,9 +894,9 @@ function armAutolock(){
 
 /* ---------- render principal ---------- */
 function render(){
-  const hl=['cuentas','personas','cats','budget','sync','ajustes'].includes(ui.tab)?'mas':ui.tab;document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.tab===hl));
+  const hl=['cuentas','personas','favoritos','cats','budget','sync','ajustes'].includes(ui.tab)?'mas':ui.tab;document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.tab===hl));
   const v=$('#view');
-  v.innerHTML=({resumen:vResumen,movs:vMovs,deudas:vDeudas,mas:vMas,cuentas:vCuentas,personas:vPeople,cats:vCats,budget:vBudget,sync:vSync,ajustes:vAjustes})[ui.tab]();
+  v.innerHTML=({resumen:vResumen,movs:vMovs,deudas:vDeudas,mas:vMas,cuentas:vCuentas,personas:vPeople,favoritos:vFavorites,cats:vCats,budget:vBudget,sync:vSync,ajustes:vAjustes})[ui.tab]();
   if(ui.tab==='movs')bindFilters();
   paintIcons(v);
 }
@@ -971,7 +972,7 @@ function vResumen(){
   const isCur=mk===monthKey(nowLocal());
   const months=[];for(let i=5;i>=0;i--)months.push(shiftMonth(mk,-i));
   const tr=months.map(m=>({m,...monthTotals(m)}));const maxT=Math.max(1,...tr.map(x=>Math.max(x.ing,x.gas)));
-  return vInstall()
+  return favoriteChips()+vInstall()
   +(al.length?`<div class="alerts">${al.map(x=>`<div class="alert ${x.lvl}" data-act="${x.act||'goto'}" data-tab="${x.tab||'deudas'}">${ic(icn[x.lvl])}<span>${esc(x.txt)}</span></div>`).join('')}</div>`:'')
   +setup+peopleHome()
   +`<section class="month">
@@ -1048,6 +1049,7 @@ function bindFilters(){
 function backHead(title,lede=''){return `<div class="pagehead"><button class="iconbtn back" data-act="goto" data-tab="mas" aria-label="Volver">${ic('left')}</button><h1 class="page">${title}</h1></div>${lede?`<p class="lede">${lede}</p>`:''}`;}
 function vMas(){
   const items=[
+    ['favoritos','list','Favoritos','Tus registros frecuentes, con o sin monto fijo.'],
     ['personas','hand','Personas','Reembolsos y préstamos, por persona o empresa.'],
     ['cuentas','wallet','Cuentas','Bancos, efectivo, tarjetas, préstamos y lo que te deben.'],
     ['cats','tag','Categorías','En qué gastas y de dónde viene tu dinero.'],
@@ -1167,11 +1169,61 @@ function ask({title,text='',ok='Aceptar',danger=false,input=null}){
   });
 }
 
+/* ---------- favoritos y sugerencias: sin cambiar el historial ---------- */
+function txHistory(kind){return S.tx.filter(t=>t.date?.slice(0,10)<=todayStr()&&(!kind||txKind(t)===kind)).sort((a,b)=>b.date.localeCompare(a.date));}
+function recentHistory(){return txHistory().filter(t=>daysBetween(t.date.slice(0,10),todayStr())<90);}
+function recentPeople(){const used=new Map();for(const t of txHistory())if(t.person&&!used.has(t.person))used.set(t.person,t.date);
+  return [...(S.people||[])].sort((a,b)=>(used.get(b.id)||'').localeCompare(used.get(a.id)||'')||a.name.localeCompare(b.name));}
+function kindAccount(kind){try{const p=JSON.parse(lsGet(PREF_KEY)||'{}');return p.lastAccByKind?.[kind]||p.lastAcc;}catch(_){return null;}}
+function rememberAccount(kind,id){let p={};try{p=JSON.parse(lsGet(PREF_KEY)||'{}');}catch(_){}p.lastAcc=id;p.lastAccByKind={...p.lastAccByKind,[kind]:id};lsSet(PREF_KEY,JSON.stringify(p));}
+function noteOptions(kind){const count=new Map();for(const t of txHistory(kind))if(t.note?.trim())count.set(t.note,(count.get(t.note)||0)+1);
+  return [...count].sort((a,b)=>b[1]-a[1]).slice(0,30).map(([n])=>`<option value="${esc(n)}"></option>`).join('');}
+function learnForm(m,getKind,pre={}){const q=s=>m.querySelector(s),note=q('#fNote,#sNote'),account=q('#fAcc,#sAcc'),category=q('#fCat');if(!note)return;
+  let applying=false,manualAccount=!!pre.acc,manualCategory=!!pre.cat;
+  account?.addEventListener('change',()=>{if(!applying)manualAccount=true;});category?.addEventListener('change',()=>{if(!applying)manualCategory=true;});q('#fSub')?.addEventListener('change',()=>{if(!applying)manualCategory=true;});
+  let list=q('#noteList');if(!list){list=document.createElement('datalist');list.id='noteList';note.after(list);}note.setAttribute('list',list.id);
+  const refresh=()=>list.innerHTML=noteOptions(getKind());refresh();q('#seg')?.addEventListener('click',refresh);
+  note.addEventListener('input',()=>{refresh();const matches=txHistory(getKind()).filter(t=>t.note===note.value.trim());if(matches.length<2)return;const last=matches[0];applying=true;
+    try{if(!manualAccount&&[...account.options].some(o=>o.value===last.acc)&&!acc(last.acc)?.archived){account.value=last.acc;account.dispatchEvent(new Event('change',{bubbles:true}));}
+      if(category&&!manualCategory&&last.cat&&[...category.options].some(o=>o.value===last.cat)){category.value=last.cat;category.dispatchEvent(new Event('change'));const sub=q('#fSub');if(sub&&[...sub.options].some(o=>o.value===last.sub)){sub.value=last.sub;sub.dispatchEvent(new Event('change'));}}}finally{applying=false;}
+  });
+}
+function sortedFavorites(){return [...(S.favorites||[])].sort((a,b)=>(a.order||0)-(b.order||0)||a.id.localeCompare(b.id));}
+function favoriteChips(){const list=sortedFavorites().slice(0,8);return list.length?`<div class="favorite-chips" aria-label="Favoritos">${list.map(f=>`<button class="btn" data-act="useFavorite" data-id="${esc(f.id)}">☆ ${esc(f.name)}</button>`).join('')}</div>`:'';}
+function favoriteFields(m){const foot=m.querySelector('.sheetfoot');if(!foot)return;
+  const box=document.createElement('div');box.className='favorite-options hidden';box.innerHTML='<div class="field"><label for="favName">Nombre del favorito</label><input class="input" id="favName" maxlength="80"></div><label class="favorite-label"><input type="checkbox" id="favFixed"> El monto siempre es el mismo</label>';foot.before(box);
+  const label=document.createElement('label');label.className='favorite-label';label.id='favToggle';label.innerHTML='<input type="checkbox" id="favCheck"> ☆ Guardar como favorito';foot.querySelector('.confirmation').after(label);
+  label.querySelector('input').onchange=e=>{box.classList.toggle('hidden',!e.target.checked);if(e.target.checked){const name=m.querySelector('#favName');if(!name.value)name.value=m.querySelector('#fNote,#sNote')?.value.trim()||[m.querySelector('#fSub')?.value||m.querySelector('#fCat')?.value,accName(m.querySelector('#fAcc,#sAcc')?.value)].filter(Boolean).join(' · ')||'Mi favorito';box.scrollIntoView({block:'nearest'});}};
+}
+function saveFavorite(m,t){if(!m.querySelector('#favCheck')?.checked)return;
+  const template={kind:txKind(t)};for(const key of ['amount','acc','to','toAmount','currency','cat','sub','person','note','rel','cardPay','legs'])if(t[key]!=null)template[key]=structuredClone(t[key]);
+  // Un pago total depende del estado de cuenta de hoy; al repetirlo se revisa como monto parcial.
+  if(template.cardPay==='total')template.cardPay='parcial';
+  const list=S.favorites??=[];list.push({id:uid(),name:m.querySelector('#favName').value.trim()||t.note||'Mi favorito',template,fixedAmount:m.querySelector('#favFixed').checked,order:Math.max(0,...list.map(f=>f.order||0))+1});
+}
+function openFavorite(id){const f=(S.favorites||[]).find(f=>f.id===id);if(!f)return;const t=structuredClone(f.template),kind=t.kind;
+  if(!SITUATIONS[kind]||!acc(t.acc)||acc(t.acc).archived||t.to&&(!acc(t.to)||acc(t.to).archived)||t.person&&!(S.people||[]).some(p=>p.id===t.person&&!p.archived)){toast('Revisa las cuentas o la persona de este favorito antes de usarlo.');return;}
+  if(t.rel&&!personRelations(t.person).some(r=>r.id===t.rel&&r.remaining>0.005)){toast('Este pendiente ya está saldado o no está disponible. Elige otro registro.');return;}
+  if(!f.fixedAmount){delete t.amount;delete t.toAmount;}t.date=nowLocal();t.type=['gasto','ingreso'].includes(kind)?kind:'transfer';
+  if(kind==='gasto')txForm(undefined,t);else situationForm(kind,null,t);
+  const m=$('#modalRoot .modal');if(!m)return;const amount=m.querySelector('#fAmt,#sAmt');if(f.fixedAmount)m.querySelector('#fConfirm,#sConfirm')?.scrollIntoView({block:'nearest'});else{amount?.focus();amount?.select();}
+}
+function vFavorites(){const list=sortedFavorites();return backHead('Favoritos','Crea uno al guardar un movimiento. Siempre podrás revisar antes de guardar.')+list.map((f,i)=>`<section class="card favorite-card"><b>${esc(f.name)}</b><p class="hint">${esc(SITUATIONS[f.template.kind]||'Registro')} · ${f.fixedAmount?money(favoriteAmount(f),f.template.currency):'Monto por completar'}</p><div class="actions"><button class="btn" data-act="useFavorite" data-id="${esc(f.id)}">Usar</button><button class="btn" data-act="editFavorite" data-id="${esc(f.id)}">Editar</button><button class="btn" aria-label="Subir ${esc(f.name)}" data-act="moveFavorite" data-id="${esc(f.id)}" data-dir="-1" ${i?'':'disabled'}>↑</button><button class="btn" aria-label="Bajar ${esc(f.name)}" data-act="moveFavorite" data-id="${esc(f.id)}" data-dir="1" ${i<list.length-1?'':'disabled'}>↓</button><button class="btn danger" data-act="deleteFavorite" data-id="${esc(f.id)}">Borrar</button></div></section>`).join('')||backHead('Favoritos','Marca «☆ Guardar como favorito» al registrar un movimiento.');}
+function favoriteAmount(f){return r2((+f.template.amount||0)+(f.template.kind==='pago_deuda'?debtInterest(f.template):0));}
+function editFavorite(id){const f=(S.favorites||[]).find(f=>f.id===id);if(!f)return;const original=stripU(f),cross=f.template.to&&acc(f.template.to)?.currency!==acc(f.template.acc)?.currency;
+  openModal(`<h2>Editar favorito</h2><div class="field"><label for="favEditName">Nombre</label><input class="input" id="favEditName" maxlength="80" value="${esc(f.name)}"></div><label class="favorite-label"><input type="checkbox" id="favEditFixed" ${f.fixedAmount?'checked':''}> El monto siempre es el mismo</label><div class="field"><label for="favEditAmount">Monto ${f.template.kind==='pago_deuda'?'total (incluye interés)':''}</label><input class="input" id="favEditAmount" type="number" inputmode="decimal" step="0.01" value="${favoriteAmount(f)||''}"></div>${cross?`<div class="field"><label for="favEditTo">Monto que llega (${esc(acc(f.template.to)?.currency)})</label><input class="input" id="favEditTo" type="number" inputmode="decimal" step="0.01" value="${esc(f.template.toAmount||'')}"></div>`:''}<div class="err" id="favErr"></div><div class="actions"><button class="btn" id="favCancel">Cancelar</button><button class="btn primary" id="favSave">Guardar favorito</button></div>`,m=>{const q=s=>m.querySelector(s);q('#favCancel').onclick=closeModal;q('#favSave').onclick=()=>{const latest=(S.favorites||[]).find(x=>x.id===id);if(!latest||stripU(latest)!==original)return q('#favErr').textContent='Este favorito cambió en otro equipo. Cierra y vuelve a abrirlo.';
+    const name=q('#favEditName').value.trim(),fixed=q('#favEditFixed').checked,total=r2(+q('#favEditAmount').value),interest=f.template.kind==='pago_deuda'?debtInterest(f.template):0;
+    if(!name||fixed&&(!(total>0)||total<interest||cross&&!(+q('#favEditTo').value>0)))return q('#favErr').textContent='Escribe un nombre y un monto válido.';
+    const template={...f.template};if(total>0){template.amount=r2(total-interest);if(template.to)template.toAmount=cross?r2(+q('#favEditTo').value):template.amount;}
+    S.favorites[S.favorites.findIndex(x=>x.id===id)]={...latest,name,fixedAmount:fixed,template};save();closeModal();render();toast('Favorito guardado');};});}
+function moveFavorite(id,dir){const list=sortedFavorites(),i=list.findIndex(f=>f.id===id),j=i+Number(dir);if(i<0||j<0||j>=list.length)return;[list[i],list[j]]=[list[j],list[i]];list.forEach((f,n)=>f.order=n+1);save();render();}
+function deleteFavorite(id){const old=(S.favorites||[]).find(f=>f.id===id);if(!old)return;const owner=KEY;S.favorites=S.favorites.filter(f=>f.id!==id);save();render();toast('Favorito eliminado',6000,{label:'Deshacer',fn:()=>{if(S&&KEY===owner&&!S.favorites.some(f=>f.id===id)){S.favorites.push({...old});save();render();}}});}
+
 /* ---------- formulario de movimiento ---------- */
 function txForm(t,pre={},original){
   const isNew=!t;
   const originalTx=original??stripU(t);
-  const lastAcc=lsGet(PREF_KEY)?JSON.parse(lsGet(PREF_KEY)).lastAcc:null;
+  const lastAcc=kindAccount(t?.type||pre.type||'gasto');
   const active=S.accounts.filter(a=>(!a.archived||(t&&(a.id===t.acc||a.id===t.to)))&&(t||!['porcobrar','porpagar'].includes(a.type)));
   const money0=active.filter(a=>!LIAB.has(a.type)&&a.type!=='porcobrar');
   const defAcc=(active.find(a=>a.id===lastAcc)||money0[0]||active[0])?.id;
@@ -1180,7 +1232,7 @@ function txForm(t,pre={},original){
   const dateTxt=d=>{if(!d)return '';const day=d.slice(0,10),k=daysBetween(day,todayStr());return (k===0?'Hoy':k===1?'Ayer':fmtD(day,{day:'numeric',month:'short',year:'numeric'}))+', '+d.slice(11,16);};
   const HELP={gasto:'Compras, comida, pasajes o servicios para ti.',ingreso:'Sueldo, ventas u otro ingreso. Si te devolvieron dinero, elige Me devolvieron.',transfer:'Mueve dinero entre tus cuentas.'};
   openModal(`<div class="sheethead"><h2>${isNew?'¿Qué pasó?':'Editar movimiento'}</h2><button class="iconbtn" id="fX" aria-label="Cerrar">${ic('x')}</button></div>
-    ${isNew?situationChoices(t.type):''}
+    ${isNew?favoriteChips()+situationChoices(t.type):''}
     <p class="typehelp" id="typeHelp"></p>
     <div class="amount-entry"><label class="amtbox"><span class="cur" id="lAmt">S/</span><input type="number" inputmode="decimal" step="0.01" min="0" id="fAmt" value="${esc(t.amount??'')}" placeholder="0.00" aria-label="Monto"></label>
       <label class="pay-account"><span id="lPay">Sale de:</span><b id="payName"></b><span aria-hidden="true">▾</span><select id="fAcc" aria-label="Cuenta de pago">${accOpts(t.acc)}</select></label></div>
@@ -1192,21 +1244,22 @@ function txForm(t,pre={},original){
     <div id="boxTo"><div class="qlabel">Hacia</div><div class="chiprow" id="toChips"></div><select class="hidden" id="fTo">${accOpts(t.to)}</select>
       <div class="field" id="boxToAmt"><label>Monto que llegó (<span id="toCur"></span>)</label><input class="input num" type="number" step="0.01" min="0" id="fToAmt" value="${t.toAmount}"><div class="hint">Las cuentas tienen monedas distintas: indica cuánto llegó.</div></div></div>
     <div class="field" id="boxPen"><label>Equivalente en soles</label><input class="input num" type="number" step="0.01" id="fPen" value="${t.pen}"><div class="hint" id="penHint"></div></div>
-    <div class="field" style="margin-top:14px"><label>Nota <span class="muted">(opcional)</span></label><input class="input" id="fNote" value="${esc(t.note)}" placeholder="Ej. Menú con mi hija" list="noteList"><datalist id="noteList">${[...new Set(S.tx.slice(0,400).map(x=>x.note).filter(Boolean))].slice(0,60).map(n=>`<option value="${esc(n)}">`).join('')}</datalist></div>
-    <div class="field hidden" id="incomePerson"><label for="fPerson">¿Quién te lo envió? (opcional)</label><select class="input" id="fPerson"><option value="">Sin indicar</option>${(S.people||[]).map(p=>`<option value="${esc(p.id)}"${p.id===t.person?' selected':''}>${esc(p.name)}</option>`).join('')}</select></div>
-    <div class="confirmation hidden" id="incomeWarning" role="status"><b>¿Es una devolución de algo que te debían? Entonces no es ingreso.</b><div class="actions"><button type="button" class="btn" id="fIsRefund">Sí, es devolución</button><button type="button" class="btn" id="fIsIncome">No, es ingreso</button></div></div>
+    <div class="field" style="margin-top:14px"><label>Nota <span class="muted">(opcional)</span></label><input class="input" id="fNote" value="${esc(t.note)}" placeholder="Ej. Menú con mi hija" list="noteList"><datalist id="noteList">${noteOptions(t.type)}</datalist></div>
+    <div class="field hidden" id="incomePerson"><label for="fPerson">¿Quién te lo envió? (opcional)</label><select class="input" id="fPerson"><option value="">Sin indicar</option>${recentPeople().map(p=>`<option value="${esc(p.id)}"${p.id===t.person?' selected':''}>${esc(p.name)}</option>`).join('')}</select></div>
+    <div class="confirmation hidden" id="incomeWarning" role="status"><b>¿Es una devolución de algo que te debían? Entonces no es ingreso.</b></div>
     <details class="more"${isNew?'':' open'}><summary>Cambiar fecha o agregar descripción</summary>
       <div class="field" style="margin-top:8px"><label>Fecha y hora</label><input class="input" type="datetime-local" id="fDate" value="${esc(t.date)}"></div>
       <div class="field"><label>Descripción</label><input class="input" id="fDesc" value="${esc(t.desc)}"></div></details>
     <details class="more"><summary>${isNew?'Más…':'Cambiar tipo'}</summary><div class="seg" id="seg"><button data-t="gasto" class="g">Gasté</button><button data-t="ingreso" class="i">Recibí dinero</button><button data-t="transfer" class="t">Moví dinero</button></div></details>
     <div class="err" id="fErr"></div>
-    <div class="sheetfoot"><div class="confirmation" id="fConfirm" aria-live="polite"></div><button class="btn primary block big" id="fSave">${isNew?'Guardar':'Guardar cambios'}</button>
+    <div class="sheetfoot"><div class="confirmation" id="fConfirm" aria-live="polite"></div><div class="actions hidden" id="incomeChoices"><button type="button" class="btn" id="fIsRefund">Sí, es devolución</button><button type="button" class="btn" id="fIsIncome">No, es ingreso</button></div><button class="btn primary block big" id="fSave">${isNew?'Guardar':'Guardar cambios'}</button>
       <div class="footrow">${isNew?'<button class="linkbtn" id="fMore">Guardar y registrar otro</button>':'<button class="linkbtn danger" id="fDel">Eliminar</button><button class="linkbtn" id="fDup">Duplicar</button>'}</div></div>`,m=>{
     m.classList.add('sheet');
     const q=s=>m.querySelector(s);let type=t.type,incomeAcknowledgment='';
     const incomeKey=()=>JSON.stringify([q('#fNote').value,q('#fPerson').value]);
     const needsIncomeCheck=()=>type==='ingreso'&&(/devol|me pago|prestamo/.test(financeName(q('#fNote').value))||personRelations(q('#fPerson').value).some(r=>!r.payable&&r.remaining>0.005));
-    function incomeAdvice(){const pending=needsIncomeCheck()&&incomeAcknowledgment!==incomeKey();q('#incomePerson').classList.toggle('hidden',type!=='ingreso');q('#incomeWarning').classList.toggle('hidden',!pending);
+    function incomeAdvice(){const pending=needsIncomeCheck()&&incomeAcknowledgment!==incomeKey();q('#incomePerson').classList.toggle('hidden',type!=='ingreso');q('#incomeWarning').classList.toggle('hidden',!pending);q('#incomeChoices').classList.toggle('hidden',!pending);q('#fSave').classList.toggle('hidden',pending);q('#fMore')?.classList.toggle('hidden',pending);
+      q('#favToggle')?.classList.toggle('hidden',pending);q('.favorite-options')?.classList.toggle('hidden',pending||!q('#favCheck')?.checked);
       if(type==='ingreso'){const a=acc(q('#fAcc').value),category=displayLabel(q('#fSub').value||q('#fCat').value);q('#fConfirm').textContent=pending?'Antes de guardar, indica si es ingreso o devolución. Lo escrito se conservará.':`Entra ${money(+q('#fAmt').value||0,a?.currency)} a ${a?.name||'tu cuenta'} · Cuenta como ingreso${category?' ('+category+')':''}.`;}}
     q('#fNote').oninput=incomeAdvice;q('#fPerson').onchange=incomeAdvice;
     q('#fIsIncome').onclick=()=>{incomeAcknowledgment=incomeKey();incomeAdvice();q('#fErr').textContent='';};
@@ -1218,7 +1271,7 @@ function txForm(t,pre={},original){
       if(t.cat&&!names.includes(t.cat))names.unshift(t.cat);
       q('#fCat').innerHTML='<option value=""></option>'+names.map(c=>`<option${c===t.cat?' selected':''}>${esc(c)}</option>`).join('')+'<option value="__new">nueva</option>';fillSubs();fillChips();}
     function fillChips(){const box=q('#catChips');if(type==='transfer'){box.innerHTML='';return;}
-      const freq={};S.tx.slice(0,400).forEach(x=>{if(x.type===type&&x.cat)freq[x.cat]=(freq[x.cat]||0)+1;});
+      const freq={};recentHistory().forEach(x=>{if(txKind(x)===type&&x.cat)freq[x.cat]=(freq[x.cat]||0)+1;});
       const names=[...q('#fCat').options].map(o=>o.value).filter(v=>v&&v!=='__new').sort((a,b)=>(freq[b]||0)-(freq[a]||0)||a.localeCompare(b));
       const cur=q('#fCat').value;
       box.innerHTML=names.map(c=>`<button type="button" data-c="${esc(c)}" class="${c===cur?'on':''}">${esc(nice(c))}</button>`).join('')+`<button type="button" class="add" data-c="__new">${ic('plus')}Nueva</button>`;
@@ -1293,7 +1346,7 @@ function txForm(t,pre={},original){
       if(o.type==='transfer'){if(o.to===o.acc){err.textContent='Elige dos cuentas distintas.';return null;}if(!(o.toAmount>0)){err.textContent='Indica el monto que llegó.';return null;}}
       else if(!o.cat){err.textContent='Elige en qué fue (categoría).';q('#catChips').scrollIntoView({block:'center'});return null;}
       if(isNew){o.id=uid();S.tx.push(o);}else{const i=S.tx.findIndex(x=>x.id===t.id);o.id=t.id;S.tx[i]=o;}
-      sortTx();save();{let p={};try{p=JSON.parse(lsGet(PREF_KEY)||'{}')}catch(_){}p.lastAcc=o.acc;lsSet(PREF_KEY,JSON.stringify(p));}return o;
+      saveFavorite(m,o);sortTx();save();rememberAccount(type,o.acc);return o;
     }
     q('#fSave').onclick=()=>{if(commit()){closeModal();render();toast(isNew?'Guardado':'Cambios guardados');}};
     q('#fX').onclick=closeModal;
@@ -1302,23 +1355,21 @@ function txForm(t,pre={},original){
     if(q('#fDel'))q('#fDel').onclick=()=>{const old=S.tx.find(x=>x.id===t.id);S.tx=S.tx.filter(x=>x.id!==t.id);save();closeModal();render();
       toast('Movimiento eliminado',6000,{label:'Deshacer',fn:()=>{S.tx.push(old);sortTx();save();render();toast('Movimiento recuperado');}});};
     q('#fDate').oninput=()=>{q('#dateTxt').textContent=dateTxt(q('#fDate').value);budHint();};
-    fillCats();sync();if(isNew&&matchMedia('(min-width:821px)').matches)q('#fAmt').focus();
+    favoriteFields(m);fillCats();sync();learnForm(m,()=>type,isNew?pre:t);if(isNew&&matchMedia('(min-width:821px)').matches)q('#fAmt').focus();
   });
 }
 function txFormReopen(t,isNew,original){if(isNew){const o={...t};delete o.id;txFormWith(o);}else txForm(t,{},original);}
-function txFormWith(pre){txForm();const m=$('#modalRoot .modal');const q=s=>m.querySelector(s);
-  q(`#seg button[data-t="${pre.type}"]`).click();
-  q('#fDate').value=pre.date;q('#fAcc').value=pre.acc;if(pre.to)q('#fTo').value=pre.to;q('#fAmt').value=pre.amount;q('#fNote').value=pre.note||'';q('#fDesc').value=pre.desc||'';q('#fPerson').value=pre.person||'';
-  if(pre.toAmount)q('#fToAmt').value=pre.toAmount;if(pre.pen&&pre.pen!==''){q('#fPen').value=pre.pen;q('#fPen').dataset.touched=1;}
-  if(pre.cat){q('#fCat').value=pre.cat;q('#fCat').dispatchEvent(new Event('change'));if(pre.sub){q('#fSub').value=pre.sub;q('#fSub').dispatchEvent(new Event('change'));}}
-  q('#fAmt').dispatchEvent(new Event('input'));}
+function txFormWith(pre){txForm(undefined,pre);}
 
 /* ---------- cuentas: asistente y formulario único ---------- */
 /* ---------- registro por situaciones y personas ---------- */
 const SITUATIONS={gasto:'Gasté',reembolso:'Gasté, pero me lo devuelven',cobro:'Me devolvieron / me pagaron lo que me debían',prestamo_dado:'Presté dinero',pago_tarjeta:'Pagué mi tarjeta',transfer:'Moví dinero entre mis cuentas',prestamo_recibido:'Me prestaron / pedí un adelanto',pago_deuda:'Pagué una deuda o cuota',ingreso:'Recibí dinero (sueldo, bono, intereses…)',ajuste:'Mi saldo no cuadra con el banco'};
 const personName=id=>(S.people||[]).find(p=>p.id===id)?.name||'';
 function situationChoices(k){const short={gasto:'Gasté',reembolso:'Me lo devuelven',cobro:'Me devolvieron',prestamo_dado:'Presté dinero',pago_tarjeta:'Pagué mi tarjeta',transfer:'Moví dinero',prestamo_recibido:'Me prestaron',pago_deuda:'Pagué una deuda',ingreso:'Recibí dinero',ajuste:'El saldo no cuadra'};
-  return `<details class="situation-picker"><summary><b class="current-situation">${esc(short[k])}</b><span>Cambiar ▾</span></summary><div class="situations" aria-label="¿Qué pasó?">${Object.entries(SITUATIONS).filter(([id])=>id!=='ajuste').map(([id,name])=>`<button type="button" class="${id===k?'on':''}" aria-pressed="${id===k}" data-act="situation" data-kind="${id}">${name}</button>`).join('')}</div><details class="more situation-more"><summary>Más…</summary><div class="situations"><button type="button" data-act="situation" data-kind="ajuste">El saldo no cuadra</button></div></details></details>`;}
+  const defaults=['gasto','reembolso','cobro','pago_tarjeta','transfer','ingreso','prestamo_dado','prestamo_recibido','pago_deuda'],counts={};for(const t of recentHistory())counts[txKind(t)]=(counts[txKind(t)]||0)+1;
+  const top=[...defaults].sort((a,b)=>(counts[b]||0)-(counts[a]||0)||defaults.indexOf(a)-defaults.indexOf(b)).slice(0,6),more=[...defaults.filter(id=>!top.includes(id)),'ajuste'];
+  const buttons=ids=>ids.map(id=>`<button type="button" class="${id===k?'on':''}" aria-pressed="${id===k}" data-act="situation" data-kind="${id}">${esc(id==='ajuste'?short[id]:SITUATIONS[id])}</button>`).join('');
+  return `<details class="situation-picker"><summary><b class="current-situation">${esc(short[k])}</b><span>Cambiar ▾</span></summary><div class="situations" aria-label="¿Qué pasó?">${buttons(top)}</div><details class="more situation-more"><summary>Más…</summary><div class="situations">${buttons(more)}</div></details></details>`;}
 function personFromNote(note){const text=financeName(note),people=S.people||[];const full=people.filter(p=>text.includes(financeName(p.name)));if(full.length===1)return full[0];
   const first=people.filter(p=>{const word=financeName(p.name).split(/\s+/)[0];return word.length>=3&&text.split(/[^a-z0-9]+/).includes(word);});return first.length===1?first[0]:null;}
 function personRelations(id,exclude){
@@ -1379,20 +1430,20 @@ function debtChoices(exclude,keep={}){const list=[],b=balances(exclude);
 function loanOperationForm(kind,existing,pre={}){
   const borrowing=kind==='prestamo_recibido',role=borrowing?'commission':'interest',t={date:nowLocal(),amount:'',note:'',...pre,...existing},isNew=!existing;
   const originalRecord=stripU(existing),initialPersonName=personName(t.person).toLocaleLowerCase();
-  const oldLegs=existing?.legs||[],chargeIndex=oldLegs.findIndex(l=>l.acc===existing.acc&&isLoanCharge(l,role));
+  const oldLegs=t.legs||[],chargeIndex=oldLegs.findIndex(l=>l.acc===t.acc&&isLoanCharge(l,role));
   const otherLegs=oldLegs.filter((l,i)=>i!==chargeIndex),oldFee=chargeIndex>=0?oldLegs[chargeIndex].amount:0;
   const otherInterest=borrowing?0:debtInterest({...t,legs:otherLegs});
-  const total=existing&&!borrowing?r2(t.amount+oldFee+otherInterest):t.amount;
+  const total=!borrowing&&t.amount!==undefined&&t.amount!==''?r2(t.amount+oldFee+otherInterest):t.amount;
   let prefs={};try{prefs=JSON.parse(lsGet(PREF_KEY)||'{}');}catch(_){}
   const active=S.accounts.filter(a=>(!a.archived||a.id===t.acc)&&(borrowing?['banco','efectivo','ahorro','inversion'].includes(a.type):!['porcobrar','porpagar'].includes(a.type)));
   const debts=borrowing?[]:debtChoices(t.id,t);
   const selectedKey=t.rel?'person:'+t.rel:t.to?'account:'+t.to:debts.find(d=>d.person===t.person)?.key||debts[0]?.key;
   const options=(list,sel)=>list.map(a=>`<option value="${esc(a.id)}"${a.id===sel?' selected':''}>${esc(a.name)} (${a.currency})</option>`).join('');
-  openModal(`<div class="sheethead"><h2>${isNew?'¿Qué pasó?':'Editar registro'}</h2><button class="iconbtn" id="sClose" aria-label="Cerrar">${ic('x')}</button></div>${isNew?situationChoices(kind):`<p><b>${esc(SITUATIONS[kind])}</b></p>`}
-    ${borrowing?`<div class="field"><label for="sPerson">¿Quién te prestó?</label><input class="input" id="sPerson" list="sPeople" value="${esc(personName(t.person))}" placeholder="Busca o escribe un nombre" autocomplete="off"><datalist id="sPeople">${(S.people||[]).filter(p=>!p.archived||p.id===t.person).map(p=>`<option value="${esc(p.name)}">`).join('')}</datalist><div class="hint">Si es alguien nuevo, se creará al guardar.</div></div><div class="field hidden" id="sPersonNew"><label for="sPersonKind">Es una</label><select class="input" id="sPersonKind"><option value="persona">Persona</option><option value="empresa">Empresa</option><option value="banco">Banco</option></select></div>`:
+  openModal(`<div class="sheethead"><h2>${isNew?'¿Qué pasó?':'Editar registro'}</h2><button class="iconbtn" id="sClose" aria-label="Cerrar">${ic('x')}</button></div>${isNew?favoriteChips()+situationChoices(kind):`<p><b>${esc(SITUATIONS[kind])}</b></p>`}
+    ${borrowing?`<div class="field"><label for="sPerson">¿Quién te prestó?</label><input class="input" id="sPerson" list="sPeople" value="${esc(personName(t.person))}" placeholder="Busca o escribe un nombre" autocomplete="off"><datalist id="sPeople">${recentPeople().filter(p=>!p.archived||p.id===t.person).map(p=>`<option value="${esc(p.name)}">`).join('')}</datalist><div class="hint">Si es alguien nuevo, se creará al guardar.</div></div><div class="field hidden" id="sPersonNew"><label for="sPersonKind">Es una</label><select class="input" id="sPersonKind"><option value="persona">Persona</option><option value="empresa">Empresa</option><option value="banco">Banco</option></select></div>`:
       `<div class="field"><label for="sDebt">¿Qué pagaste?</label><select class="input" id="sDebt">${debts.length?debts.map(d=>`<option value="${esc(d.key)}"${d.key===selectedKey?' selected':''}>${esc(d.label)}</option>`).join(''):'<option value="">No hay deudas pendientes</option>'}</select><div class="hint" id="sDebtInfo"></div></div><div class="chipgrid hidden" id="sQuotaKinds"><button type="button" id="sQuota">Cuota</button><button type="button" id="sOtherAmount">Otro monto</button></div>`}
     <div class="qlabel">${borrowing?'¿Cuánto te prestaron?':'¿Cuánto pagaste en total?'}</div><label class="amtbox"><span class="cur" id="sCur">S/</span><input id="sAmt" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0.00" value="${esc(total)}" aria-label="Monto"></label>
-    <div class="field"><label for="sAcc">${borrowing?'¿A qué cuenta entró?':'¿Desde qué cuenta?'}</label><select class="input" id="sAcc">${options(active,t.acc||prefs.lastAcc)}</select><div class="hint" id="sAccountHint"></div></div>
+    <div class="field"><label for="sAcc">${borrowing?'¿A qué cuenta entró?':'¿Desde qué cuenta?'}</label><select class="input" id="sAcc">${options(active,t.acc||kindAccount(kind))}</select><div class="hint" id="sAccountHint"></div></div>
     <details class="more" id="sFeeDetails"${oldFee?' open':''}><summary>${borrowing?'+ Comisión':'+ Interés'}</summary><div class="field"><label for="sFee">${borrowing?'¿Te cobraron comisión?':'¿Cuánto de ese pago fue interés?'}</label><input class="input" id="sFee" type="number" inputmode="decimal" step="0.01" min="0" value="${oldFee||''}" placeholder="0.00"></div></details>
     ${borrowing?`<div class="field"><label for="sDue">¿Para cuándo debes devolverlo? (opcional)</label><input class="input" id="sDue" type="date" value="${esc(t.dueDate||'')}"></div>`:''}
     <div class="field"><label for="sNote">Nota (opcional)</label><input class="input" id="sNote" value="${esc(t.note)}"></div><details class="more"><summary>Cambiar fecha</summary><input class="input" id="sDate" type="datetime-local" value="${esc(t.date)}" aria-label="Fecha y hora"></details>
@@ -1401,7 +1452,7 @@ function loanOperationForm(kind,existing,pre={}){
     const selectedPerson=()=>{const name=q('#sPerson')?.value.trim().toLocaleLowerCase();return (name===initialPersonName&&(S.people||[]).find(p=>p.id===t.person))||(S.people||[]).find(p=>p.name.toLocaleLowerCase()===name);};
     const selectedDebt=()=>borrowing?null:debtChoices(t.id,t).find(d=>d.key===q('#sDebt').value);
     function fillAccounts(){const keep=q('#sAcc').value,d=selectedDebt(),list=active.filter(a=>borrowing||a.currency===d?.currency);
-      const preferred=[keep,t.acc,prefs.lastAcc].find(id=>list.some(a=>a.id===id));q('#sAcc').innerHTML=options(list,preferred);
+      const preferred=[keep,t.acc,kindAccount(kind)].find(id=>list.some(a=>a.id===id));q('#sAcc').innerHTML=options(list,preferred);
       q('#sAccountHint').textContent=!list.length?'Agrega una cuenta en la moneda de esta deuda para registrar el pago.':!borrowing?'La cuenta y la deuda deben usar la misma moneda.':'';}
     function data(){const total=r2(+q('#sAmt').value),fee=r2(+q('#sFee').value||0),d=selectedDebt(),a=acc(q('#sAcc').value);
       return {total,fee,d,a,principal:borrowing?total:r2(total-fee-otherInterest),person:borrowing?selectedPerson():null};}
@@ -1439,12 +1490,12 @@ function loanOperationForm(kind,existing,pre={}){
       if(borrowing){o.person=person.id;o.dueDate=q('#sDue').value||null;}else if(x.d.person){o.person=x.d.person;o.rel=x.d.rel;}else{o.to=x.d.to;o.toAmount=x.principal;}
       const legs=oldLegs.map(l=>({...l}));if(x.fee>0){const labels=chargeIndex>=0?{cat:oldLegs[chargeIndex].cat,sub:oldLegs[chargeIndex].sub}:financeCategory(role),leg={...(chargeIndex>=0?oldLegs[chargeIndex]:{}),acc:x.a.id,amount:x.fee,currency:x.a.currency,role,...labels};if(chargeIndex>=0)legs[chargeIndex]=leg;else legs.push(leg);}else if(chargeIndex>=0)legs.splice(chargeIndex,1);
       if(legs.length||existing?.legs)o.legs=legs;
-      if(isNew)S.tx.push(o);else S.tx[i]=o;sortTx();save();prefs.lastAcc=x.a.id;lsSet(PREF_KEY,JSON.stringify(prefs));closeModal();render();toast('Guardado');};
+      if(isNew)S.tx.push(o);else S.tx[i]=o;saveFavorite(m,o);sortTx();save();rememberAccount(kind,x.a.id);closeModal();render();toast('Guardado');};
     if(!isNew)q('#sDelete').onclick=async()=>{if(S.tx.some(z=>z.rel===t.id))return q('#sErr').textContent='Primero elimina los pagos vinculados a este préstamo.';
       if(!await ask({title:'¿Eliminar este registro?',text:'Se actualizarán los saldos. Podrás deshacerlo.',ok:'Eliminar',danger:true})){loanOperationForm(kind,existing);return;}
       const old=S.tx.find(z=>z.id===t.id);if(!old||stripU(old)!==originalRecord||S.tx.some(z=>z.rel===t.id)){closeModal();toast('El registro cambió o recibió pagos. Revísalo de nuevo.');return;}
       const owner=KEY;S.tx=S.tx.filter(z=>z.id!==t.id);save();closeModal();render();toast('Registro eliminado',6000,{label:'Deshacer',fn:()=>{if(S&&KEY===owner&&!S.tx.some(z=>z.id===t.id)){S.tx.push(old);sortTx();save();render();}}});};
-    if(!borrowing)fillAccounts();update();
+    favoriteFields(m);if(!borrowing)fillAccounts();update();learnForm(m,()=>kind,isNew?pre:t);
   });
 }
 function checkedLabel(a){if(!a.checkedAt||!Number.isFinite(Date.parse(a.checkedAt)))return '⚠ Nunca cuadrada';
@@ -1531,12 +1582,12 @@ function situationForm(kind,existing,pre={}){
   const targets=active.filter(a=>!isCardPay||a.type==='tarjeta');
   let prefs={};try{prefs=JSON.parse(lsGet(PREF_KEY)||'{}');}catch(_){}
   const opts=(list,id)=>list.map(a=>`<option value="${a.id}"${a.id===id?' selected':''}>${esc(a.name)} (${a.currency})</option>`).join('');
-  openModal(`<div class="sheethead"><h2>${isNew?'¿Qué pasó?':'Editar registro'}</h2><button class="iconbtn" id="sClose" aria-label="Cerrar">${ic('x')}</button></div>${isNew?situationChoices(kind):`<p><b>${esc(TX_PRESENTATION[kind]?.name||SITUATIONS[kind]||'Movimiento')}</b></p>`}
-    ${personMode?`<div class="field"><label for="sPerson">${kind==='reembolso'?'¿Quién te lo devuelve?':kind==='cobro'?'¿Quién te pagó?':'¿A quién prestaste?'}</label><input class="input" id="sPerson" list="sPeople" value="${esc(personName(t.person))}" placeholder="Busca o escribe un nombre" autocomplete="off"><datalist id="sPeople">${(S.people||[]).filter(p=>!p.archived||p.id===t.person).map(p=>`<option value="${esc(p.name)}">`).join('')}</datalist><div class="hint">${kind==='cobro'?'Elige una persona con un pendiente.':'Si es alguien nuevo, se creará al guardar.'}</div></div><div id="sPersonNew" class="hidden field"><label for="sPersonKind">Es una</label><select class="input" id="sPersonKind"><option value="persona">Persona</option><option value="empresa">Empresa</option><option value="banco">Banco</option></select></div>`:''}
+  openModal(`<div class="sheethead"><h2>${isNew?'¿Qué pasó?':'Editar registro'}</h2><button class="iconbtn" id="sClose" aria-label="Cerrar">${ic('x')}</button></div>${isNew?favoriteChips()+situationChoices(kind):`<p><b>${esc(TX_PRESENTATION[kind]?.name||SITUATIONS[kind]||'Movimiento')}</b></p>`}
+    ${personMode?`<div class="field"><label for="sPerson">${kind==='reembolso'?'¿Quién te lo devuelve?':kind==='cobro'?'¿Quién te pagó?':'¿A quién prestaste?'}</label><input class="input" id="sPerson" list="sPeople" value="${esc(personName(t.person))}" placeholder="Busca o escribe un nombre" autocomplete="off"><datalist id="sPeople">${recentPeople().filter(p=>!p.archived||p.id===t.person).map(p=>`<option value="${esc(p.name)}">`).join('')}</datalist><div class="hint">${kind==='cobro'?'Elige una persona con un pendiente.':'Si es alguien nuevo, se creará al guardar.'}</div></div><div id="sPersonNew" class="hidden field"><label for="sPersonKind">Es una</label><select class="input" id="sPersonKind"><option value="persona">Persona</option><option value="empresa">Empresa</option><option value="banco">Banco</option></select></div>`:''}
     ${kind==='cobro'?'<div id="sBalances" class="hint"></div><div class="field"><label for="sRel">¿Qué te está devolviendo?</label><select class="input" id="sRel"></select></div>':''}
     ${isCardPay?`<div class="field"><label for="sTo">¿Qué tarjeta pagaste?</label><select class="input" id="sTo">${opts(targets,t.to)}</select></div><div class="hint" id="sCardInfo"></div><div class="chipgrid" id="sPayKinds"><button data-pay="minimo">Mínimo</button><button data-pay="total">Total del mes</button><button data-pay="parcial">Otro monto</button></div>`:''}
     <label class="amtbox"><span class="cur" id="sCur">S/</span><input type="number" inputmode="decimal" step="0.01" min="0" id="sAmt" value="${esc(t.amount)}" placeholder="0.00" aria-label="Monto"></label>
-    <div class="field"><label for="sAcc">${kind==='cobro'?'¿A qué cuenta entró?':'¿De dónde salió?'}</label><select class="input" id="sAcc">${opts(sources,t.acc||prefs.lastAcc)}</select></div>
+    <div class="field"><label for="sAcc">${kind==='cobro'?'¿A qué cuenta entró?':'¿De dónde salió?'}</label><select class="input" id="sAcc">${opts(sources,t.acc||kindAccount(kind))}</select></div>
     ${transfer&&!isCardPay?`<div class="field"><label for="sTo">¿A dónde lo moviste?</label><select class="input" id="sTo">${opts(targets,t.to||targets.find(a=>a.id!==sources[0]?.id)?.id)}</select></div>`:''}
     ${transfer?`<div class="field hidden" id="sExchange"><label for="sToAmt">Monto que llegó (<span id="sToCur"></span>)</label><input class="input" id="sToAmt" type="number" inputmode="decimal" step="0.01" min="0" value="${esc(t.toAmount??'')}"><div class="hint">Usa los montos reales de las dos cuentas.</div></div>`:''}
     ${kind==='prestamo_dado'?`<div class="field"><label for="sDue">Fecha de devolución (opcional)</label><input class="input" id="sDue" type="date" value="${esc(t.dueDate||'')}"></div>`:''}
@@ -1588,9 +1639,9 @@ function situationForm(kind,existing,pre={}){
       const o={...t,id:t.id||uid(),kind,type:'transfer',date:q('#sDate').value||nowLocal(),amount,currency:a.currency,acc:a.id,note:q('#sNote').value.trim(),pen};
       if(kind==='cobro'){delete o.cat;delete o.sub;}
       if(personMode)o.person=person.id;if(transfer){o.to=b.id;o.toAmount=toAmount;}if(kind==='cobro')o.rel=r.id;if(isCardPay)o.cardPay=cardPay;if(kind==='prestamo_dado')o.dueDate=q('#sDue').value||null;
-      if(isNew)S.tx.push(o);else S.tx[S.tx.findIndex(x=>x.id===t.id)]=o;sortTx();save();prefs.lastAcc=a.id;lsSet(PREF_KEY,JSON.stringify(prefs));closeModal();render();toast('Guardado');};
+      if(isNew)S.tx.push(o);else S.tx[S.tx.findIndex(x=>x.id===t.id)]=o;saveFavorite(m,o);sortTx();save();rememberAccount(kind,a.id);closeModal();render();toast('Guardado');};
     if(!isNew)q('#sDelete').onclick=async()=>{if(S.tx.some(x=>x.rel===t.id))return q('#sErr').textContent='Primero elimina las devoluciones vinculadas a este registro.';if(!await ask({title:'¿Eliminar este registro?',text:'Se actualizarán los saldos de la cuenta y la persona.',ok:'Eliminar',danger:true})){situationForm(kind,existing);return;}S.tx=S.tx.filter(x=>x.id!==t.id);save();closeModal();render();};
-    update();
+    favoriteFields(m);update();learnForm(m,()=>kind,isNew?pre:t);
   });
 }
 
@@ -1889,6 +1940,10 @@ async function doAct(d){
     case 'showSetup':S.settings.hideSetup=false;save();ui.tab='resumen';render();break;
     case 'newTx':if(!S.accounts.length){toast('Primero crea una cuenta');break;}txForm();break;
     case 'reconcile':reconcileForm({accId:d.id});break;
+    case 'useFavorite':openFavorite(d.id);break;
+    case 'editFavorite':editFavorite(d.id);break;
+    case 'moveFavorite':moveFavorite(d.id,d.dir);break;
+    case 'deleteFavorite':deleteFavorite(d.id);break;
     case 'situation':if(d.kind==='gasto')txForm();else situationForm(d.kind,null,{person:d.person,rel:d.rel,to:d.to,amount:d.amt});break;
     case 'editTx':{const t=S.tx.find(t=>t.id===d.id);if(t.kind&&!['gasto','ingreso','transfer'].includes(t.kind))situationForm(t.kind,t);else txForm(t);break;}
     case 'person':personForm((S.people||[]).find(p=>p.id===d.id));break;
