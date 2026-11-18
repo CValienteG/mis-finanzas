@@ -637,6 +637,7 @@ function stamp(){
     for(const id of SNAP[c].keys())if(!seen.has(id)){S.del[id]=now;ch=true;}}
   if(stripU(S.settings)!==SNAP.settings){S.settings.u=now;ch=true;}
   if(JSON.stringify(S.cats)!==SNAP.catsJ){ch=true;
+    if(S.catsReplacement){S.catsReplacement={at:Math.max(now,S.catsReplacement.at+1),cats:structuredClone(S.cats)};S.catsReplacedAt=S.catsReplacement.at;}
     for(const t of ['gasto','ingreso']){for(const k of SNAP.cats[t])if(!(k in S.cats[t]))S.catDel[t+'|'+k]=now;
       for(const k of Object.keys(S.cats[t]))if(!SNAP.cats[t].has(k))delete S.catDel[t+'|'+k];}}
   takeSnap();return ch;
@@ -653,6 +654,9 @@ function mergeStates(L,R){
         if(checked&&winner.checkedAt!==checked)winner={...winner,checkedAt:checked,u:Math.max(Date.now(),(winner.u||0)+1)};}
       m.set(e.id,winner);}}
     out[c]=order.map(id=>m.get(id)).filter(e=>!(del[e.id]&&del[e.id]>=(e.u||0)));}
+  const epoch=[L.resetEpoch,R.resetEpoch].filter(x=>x?.at&&Array.isArray(x.keep)).sort((a,b)=>b.at-a.at||JSON.stringify(a).localeCompare(JSON.stringify(b)))[0];
+  if(epoch){out.resetEpoch=epoch;const keep=new Set(epoch.keep);
+    for(const c of COLS)out[c]=out[c].filter(e=>{if((e.u||0)<epoch.at&&!keep.has(e.id)){del[e.id]=Number.MAX_SAFE_INTEGER;return false;}return true;});}
   out.del=del;
   const cd={...(R.catDel||{})};for(const [k,v] of Object.entries(L.catDel||{}))cd[k]=Math.max(v,cd[k]||0);out.catDel=cd;
   out.cats={};for(const t of ['gasto','ingreso']){const a=(L.cats||{})[t]||{},b=(R.cats||{})[t]||{};const o={};
@@ -660,7 +664,12 @@ function mergeStates(L,R){
       if(cd[t+'|'+k]&&!out.tx.some(x=>x.type===t&&x.cat===k))continue;
       o[k]=[...new Set([...(a[k]||[]),...(b[k]||[])])];}
     out.cats[t]=o;}
+  // El reemplazo guarda también una copia: una versión antigua puede unir las
+  // subcategorías, pero no puede contaminar el reemplazo en la siguiente mezcla.
+  const replacement=[L.catsReplacement,R.catsReplacement].filter(x=>x?.at&&x.cats).sort((a,b)=>b.at-a.at||JSON.stringify(a).localeCompare(JSON.stringify(b)))[0];
+  if(replacement){out.catsReplacement=replacement;out.catsReplacedAt=replacement.at;out.cats=structuredClone(replacement.cats);}
   out.settings=((R.settings?.u||0)>(L.settings?.u||0))?R.settings:L.settings;
+  if(epoch&&out.settings.budgets)out.settings={...out.settings,budgets:Object.fromEntries(Object.entries(out.settings.budgets).filter(([cat])=>Object.hasOwn(out.cats.gasto,cat)))};
   out.sync=L.sync;out.tx.sort((a,b)=>a.date<b.date?1:a.date>b.date?-1:0);
   return out;
 }
@@ -897,6 +906,8 @@ function render(){
   const hl=['cuentas','personas','favoritos','cats','budget','sync','ajustes'].includes(ui.tab)?'mas':ui.tab;document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.tab===hl));
   const v=$('#view');
   v.innerHTML=({resumen:vResumen,movs:vMovs,deudas:vDeudas,mas:vMas,cuentas:vCuentas,personas:vPeople,favoritos:vFavorites,cats:vCats,budget:vBudget,sync:vSync,ajustes:vAjustes})[ui.tab]();
+  const missing=S.tx.filter(t=>[t.acc,t.to,...(t.legs||[]).map(l=>l.acc)].filter(Boolean).some(id=>!acc(id)));
+  if(missing.length)v.insertAdjacentHTML('afterbegin',`<p class="note" role="alert">Hay ${missing.length} movimiento(s) de otro equipo con una cuenta eliminada al empezar de cero. Revísalos en Movimientos y elige una cuenta actual al editarlos.</p>`);
   if(ui.tab==='movs')bindFilters();
   paintIcons(v);
 }
@@ -1144,7 +1155,8 @@ function vAjustes(){
     <div class="row"><div class="txt"><b>Cambiar contraseña</b><span>Tus otros equipos te la pedirán al sincronizar.</span></div><button class="btn" data-act="changePw">Cambiar</button></div>
     <div class="row"><div class="txt"><b>Borrar datos de este equipo</b><span>No se puede deshacer.</span></div><button class="btn danger" data-act="wipe">Borrar</button></div>
   </div>
-  <p class="note"><b>Tu privacidad:</b> todo se cifra con tu contraseña antes de guardarse o subirse. La app solo se conecta a tu cuenta de GitHub y tu contraseña nunca sale de tus equipos.</p>`;
+  <p class="note"><b>Tu privacidad:</b> todo se cifra con tu contraseña antes de guardarse o subirse. La app solo se conecta a tu cuenta de GitHub y tu contraseña nunca sale de tus equipos.</p>
+  <h2 class="sect neg">Zona de peligro</h2><div class="card"><h3>Empezar de cero</h3><p>Vacía tus cuentas y registros en todos tus equipos, conservando tu contraseña y la sincronización. Puedes elegir una plantilla privada.</p><button class="btn danger" data-act="startOver">Empezar de cero</button></div>`;
 }
 
 document.addEventListener('change',e=>{
@@ -1986,6 +1998,7 @@ async function doAct(d){
       if(ok){delete S.sync;await persistLocalOnly();setSync('off');render();toast('Sincronización desconectada');}break;}
     case 'installApp':if(window.__installPrompt){const p=window.__installPrompt;window.__installPrompt=null;p.prompt();try{await p.userChoice;}catch(_){}render();}break;
     case 'backup':await doBackup();break;
+    case 'startOver':startOverForm();break;
     case 'restore':case 'restoreFromLock':$('#fileBackup').value='';$('#fileBackup').click();break;
     case 'importXlsx':$('#fileXlsx').value='';$('#fileXlsx').click();break;
     case 'exportCsv':downloadCsv(filteredTx(),`movimientos-${ui.month}.csv`);break;
@@ -1997,13 +2010,76 @@ async function doAct(d){
 }
 
 /* ---------- respaldo ---------- */
+// La plantilla solo se lee del archivo elegido. Nunca forma parte de la app publicada.
+function readStartTemplate(raw){
+  const fail=()=>{throw new Error('Ese archivo no es una plantilla válida de Mis Finanzas (versión 1).');};
+  const text=v=>typeof v==='string'&&v.trim().length>0&&v.length<=200;
+  if(!raw||raw.app!=='mis-finanzas-plantilla'||raw.v!==1||!Array.isArray(raw.accounts)||!raw.cats||!Array.isArray(raw.people)||!Array.isArray(raw.favorites))fail();
+  const names=new Set(),accounts=raw.accounts.map(a=>{
+    if(!a||!text(a.name)||!Object.hasOwn(TYPES,a.type)||!['PEN','USD'].includes(a.currency)||names.has(a.name.trim()))fail();
+    names.add(a.name.trim());return {name:a.name.trim(),type:a.type,currency:a.currency,initial:0,archived:false};});
+  const cats={};for(const type of ['gasto','ingreso']){const cs=raw.cats[type];if(!cs||typeof cs!=='object'||Array.isArray(cs))fail();cats[type]={};
+    for(const [cat,subs] of Object.entries(cs)){if(!text(cat)||['__proto__','constructor','prototype'].includes(cat)||!Array.isArray(subs)||!subs.every(text))fail();cats[type][cat]=[...new Set(subs)];}}
+  const people=raw.people.map(p=>{if(!p||!text(p.name)||!['persona','empresa','banco'].includes(p.kind))fail();return {name:p.name.trim(),kind:p.kind,note:'',archived:false};});
+  const favorites=raw.favorites.map(f=>{const t=f?.template;if(!text(f?.name)||!t||!['gasto','ingreso','transfer','pago_tarjeta'].includes(t.kind)||!names.has(t.acc)||t.to&&!names.has(t.to))fail();
+    if(['gasto','ingreso'].includes(t.kind)&&(!Object.hasOwn(cats[t.kind],t.cat)||t.sub&&!cats[t.kind][t.cat].includes(t.sub)))fail();
+    if(f.fixedAmount&&!(Number.isFinite(t.amount)&&t.amount>0))fail();
+    const template={kind:t.kind,acc:t.acc};for(const k of ['to','cat','sub','note'])if(typeof t[k]==='string')template[k]=t[k];
+    for(const k of ['amount','toAmount'])if(Number.isFinite(t[k])&&t[k]>0)template[k]=t[k];
+    return {name:f.name.trim(),template,fixedAmount:!!f.fixedAmount};});
+  return {accounts,cats,people,favorites};
+}
+function startTemplateSummary(t){const count=type=>Object.keys(t.cats[type]).length,subs=type=>Object.values(t.cats[type]).reduce((n,s)=>n+s.length,0);
+  return `${t.accounts.length} cuentas · ${count('gasto')} categorías de gasto (${subs('gasto')} subcategorías) · ${count('ingreso')} de ingreso (${subs('ingreso')}) · ${t.people.length} personas · ${t.favorites.length} favoritos`;}
+function startOverForm(){
+  openModal(`<h2>Empezar de cero</h2><p>Se borrarán todos tus movimientos, personas, favoritos, repetidos y cuentas en este equipo y en tu celular.</p><p>Se mantienen tu contraseña y la sincronización.</p><p>Antes se descarga un respaldo cifrado, por si acaso.</p>
+    <p class="note">Actualiza o vuelve a abrir la app en el celular antes de continuar. Una versión anterior puede mostrar subcategorías antiguas hasta que se actualice.</p>
+    <div class="field"><label for="resetFile">Cargar una plantilla (opcional)</label><input class="input" type="file" id="resetFile" accept=".json,application/json"><span class="hint" id="resetSummary">Sin plantilla: una cuenta de efectivo en cero y las categorías iniciales.</span></div>
+    <div class="field"><label for="resetConfirm">Escribe BORRAR para confirmar</label><input class="input" id="resetConfirm" autocomplete="off" spellcheck="false"></div><div class="err" id="resetErr" role="alert"></div>
+    <div class="actions"><button class="btn" id="resetCancel">Cancelar</button><button class="btn" style="background:var(--neg);border-color:var(--neg);color:var(--card);white-space:normal;min-height:44px" id="resetGo" disabled>Borrar todo y empezar</button></div>`,m=>{
+    const q=s=>m.querySelector(s);let template=null,valid=true,loading=false,busy=false,selection=0;
+    const update=()=>q('#resetGo').disabled=busy||loading||!valid||q('#resetConfirm').value!=='BORRAR';
+    q('#resetCancel').onclick=closeModal;q('#resetConfirm').oninput=update;
+    q('#resetFile').onchange=async()=>{const ticket=++selection,file=q('#resetFile').files[0];template=null;valid=false;loading=true;update();q('#resetErr').textContent='';
+      try{if(file&&file.size>2*1024*1024)throw new Error('La plantilla es demasiado grande (máximo 2 MB).');const parsed=file?readStartTemplate(JSON.parse(await file.text())):null;
+        if(ticket!==selection)return;template=parsed;valid=true;q('#resetSummary').textContent=template?startTemplateSummary(template):'Sin plantilla: una cuenta de efectivo en cero y las categorías iniciales.';
+      }catch(e){if(ticket!==selection)return;q('#resetSummary').textContent='Elige otra plantilla o quita el archivo.';q('#resetErr').textContent=e instanceof SyntaxError?'El archivo no contiene un JSON válido. Elige una plantilla de Mis Finanzas.':e.message;}
+      finally{if(ticket===selection){loading=false;update();}}};
+    q('#resetGo').onclick=async()=>{if(busy||loading||!valid||q('#resetConfirm').value!=='BORRAR')return;
+      if(IS_NATIVE){q('#resetErr').textContent='Hazlo desde Edge en tu PC para descargar el respaldo. Después sincroniza el celular.';return;}
+      busy=true;update();q('#resetCancel').disabled=true;q('#resetFile').disabled=true;q('#resetConfirm').disabled=true;$('#app').inert=true;
+      let original=S,committed=false;
+      try{clearTimeout(saveTimer);await saving;if(SYNC.busy)throw new Error('Espera a que termine la sincronización y vuelve a intentarlo.');
+        clearTimeout(SYNC.timer);await persist();clearTimeout(SYNC.timer);await syncNow();clearTimeout(SYNC.timer);original=S;await doBackup();clearTimeout(saveTimer);
+        if(S!==original||!KEY||!m.isConnected)throw new Error('La app se bloqueó o cerraste la confirmación. Vuelve a abrirla antes de continuar.');
+        const fresh=blankState(),now=Math.max(Date.now(),(S.catsReplacement?.at||0)+1),next={...S,...fresh,settings:{...S.settings},sync:S.sync,del:{...S.del},catDel:{...S.catDel}};
+        // Estos ids se retiran definitivamente: incluso una edición tardía del
+        // equipo antiguo debe respetar su borrado. Los nuevos reciben otros ids.
+        for(const c of COLS){for(const e of S[c]||[])next.del[e.id]=Number.MAX_SAFE_INTEGER;next[c]=fresh[c]||[];}
+        if(template){next.accounts=template.accounts.map(a=>({...a,id:uid(),u:now}));next.cats=structuredClone(template.cats);next.people=template.people.map(p=>({...p,id:uid(),u:now}));
+          const ids=new Map(next.accounts.map(a=>[a.name,a.id]));next.favorites=template.favorites.map((f,i)=>{const t={...f.template,acc:ids.get(f.template.acc)};if(t.to)t.to=ids.get(t.to);t.currency=next.accounts.find(a=>a.id===t.acc).currency;return {...f,id:uid(),template:t,order:i+1,u:now};});}
+        for(const a of next.accounts){a.u=now;delete a.checkedAt;}
+        next.resetEpoch={at:now,keep:COLS.flatMap(c=>(next[c]||[]).map(e=>e.id))};
+        for(const type of ['gasto','ingreso'])for(const cat of Object.keys(S.cats[type]||{}))if(!Object.hasOwn(next.cats[type],cat))next.catDel[type+'|'+cat]=now;
+        next.catsReplacement={at:now,cats:structuredClone(next.cats)};next.catsReplacedAt=now;
+        next.settings.budgets=Object.fromEntries(Object.entries(next.settings.budgets||{}).filter(([cat])=>Object.hasOwn(next.cats.gasto,cat)));delete next.settings.checkedAt;delete next.settings.lastAccByKind;next.settings.u=now;
+        // Guarda primero la nueva bóveda: un fallo de almacenamiento deja intacto S.
+        const vault=await sealWith(KEY,SALT,next);if(!lsSet(VAULT_KEY,JSON.stringify(vault)))throw new Error('No se pudo guardar. No se borró nada; revisa el espacio del navegador.');
+        S=next;committed=true;takeSnap();let prefs={};try{prefs=JSON.parse(lsGet(PREF_KEY)||'{}');}catch(_){}delete prefs.lastAccByKind;delete prefs.lastAcc;lsSet(PREF_KEY,JSON.stringify(prefs));
+        ui.month=monthKey(nowLocal());ui.f={q:'',type:'',acc:'',cat:''};ui.tab='resumen';await persist();clearTimeout(SYNC.timer);await syncNow();
+        if(!S)return;
+        render();openModal(`<h2>Listo, empezaste de cero</h2><p>Ahora pon el saldo real de cada cuenta y los datos de tus tarjetas.</p><p>${S.sync?.token?(SYNC.st==='ok'?'Tus equipos ya pueden recibir el cambio.':'El cambio está guardado en esta PC. Falta sincronizar: revisa la conexión y toca Sincronizar.'): 'La sincronización no estaba activada.'}</p><div class="actions"><button class="btn primary" id="resetAccounts">Llenar mis cuentas</button></div>`,el=>el.querySelector('#resetAccounts').onclick=()=>{closeModal();ui.tab='cuentas';render();});
+      }catch(e){if(m.isConnected)q('#resetErr').textContent=committed?'El cambio se guardó; vuelve a abrir la app y revisa la sincronización.':'No se borró nada. '+e.message;}
+      finally{$('#app').inert=false;busy=false;if(m.isConnected){q('#resetCancel').disabled=false;q('#resetFile').disabled=false;q('#resetConfirm').disabled=false;update();}}};
+  });
+}
 function download(name,text,type){
   if(window.MFNative&&MFNative.saveFile){try{MFNative.saveFile(name,type||'text/plain',text);return;}catch(e){}}
   const blob=new Blob([text],{type});const u=URL.createObjectURL(blob);const a=document.createElement('a');a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),2000);
 }
 async function doBackup(){
   const v=await sealWith(KEY,SALT,S);const d=new Date();
-  download(`mis-finanzas-respaldo-${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}.json`,JSON.stringify(v),'application/json');
+  await download(`mis-finanzas-respaldo-${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}.json`,JSON.stringify(v),'application/json');
   S.settings.lastBackup=d.toISOString();save();if(ui.tab==='ajustes')render();toast('Respaldo cifrado descargado');
 }
 $('#fileBackup').onchange=async e=>{

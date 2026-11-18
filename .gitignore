@@ -1,0 +1,5 @@
+android/misfinanzas.keystore
+*.apk
+node_modules/
+# Datos personales del usuario: nunca publicar
+privado/
