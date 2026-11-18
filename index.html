@@ -1000,7 +1000,7 @@ function vResumen(){
   +`<section class="card"><div class="cardhead"><h3>En qué gastaste</h3><button class="linkbtn" data-act="goto" data-tab="movs">Movimientos</button></div>
     ${cats.length?cats.slice(0,8).map(([c,v])=>`<div class="barrow" data-act="filterCat" data-cat="${esc(c)}"><div class="bname">${esc(nice(c))}</div><div class="track"><div class="fill" style="width:${(v/maxC*100).toFixed(1)}%"></div></div><div class="bval num">${money(v)}</div></div>`).join(''):'<div class="empty small"><b>Sin gastos este mes</b>Toca el botón + para registrar uno.</div>'}</section>
   <section class="card"><div class="cardhead"><h3>Tu dinero hoy</h3><button class="linkbtn" data-act="goto" data-tab="cuentas">Cuentas</button></div>
-    <div class="minis plain"><div><span>Tienes</span><b class="num">${money(act)}</b></div><div><span>Debes en total</span><b class="num neg">${money(pas)}</b></div></div>
+    <div class="minis plain"><div><span>Tienes</span><b class="num">${money(act)}</b></div><div><span>Debes en total</span><b class="num ${pas>0?'neg':'muted'}">${money(pas)}</b></div></div>
     <p class="tiny muted" style="margin:8px 0 0">"Tienes" suma tu dinero, inversiones y lo que te deben. "Debes en total" suma tarjetas, préstamos y deudas de Personas, incluidas las cuentas archivadas. En Deudas ves solo tarjetas y préstamos activos.</p></section>
   <section class="card"><h3>Últimos 6 meses</h3>
     <div class="trend">${tr.map(x=>`<div class="tcol"><div class="tbars"><div class="tbar i" style="height:${(x.ing/maxT*100).toFixed(1)}%"></div><div class="tbar g" style="height:${(x.gas/maxT*100).toFixed(1)}%"></div></div><div class="tlbl">${esc(new Date(+x.m.slice(0,4),+x.m.slice(5)-1,1).toLocaleDateString('es-PE',{month:'short'}).replace('.',''))}</div></div>`).join('')}</div>
@@ -1031,6 +1031,7 @@ function txRow(t){
   return `<div class="tx" data-act="editTx" data-id="${t.id}">${dot}<div class="mid"><div class="t1">${esc(title)}</div><div class="t2">${esc(sub)}</div></div><div class="amt num ${cls}">${txAmount(t,sign)}</div></div>`;
 }
 function txAmount(t,sign=''){const cur=txCurrency(t),target=t.to?acc(t.to):null;
+  if(t.openingUSD)return sign+money(t.openingUSD.amount,'USD')+`<div class="a2">≈ ${money(t.amount)}</div>`;
   const total=txKind(t)==='ajuste'?Math.abs(t.amount):txKind(t)==='pago_deuda'?r2(t.amount+debtInterest(t)):t.amount;
   return sign+money(total,cur)+(target&&target.currency!==cur?`<div class="a2">→ ${money(t.toAmount,target.currency)}</div>`:cur!=='PEN'?`<div class="a2">≈ ${money(txKind(t)==='pago_deuda'?toPEN(total,cur):txPen(t))}</div>`:'');}
 function vMovs(){
@@ -1076,7 +1077,7 @@ function vCuentas(){
   const G=[['dinero','Tu dinero',a=>['banco','efectivo','ahorro','inversion'].includes(a.type)],['tarjeta','Tarjetas de crédito',a=>a.type==='tarjeta'],['prestamo','Préstamos y deudas',a=>a.type==='porpagar'],['tedeben','Te deben',a=>a.type==='porcobrar']];
   const arch=S.accounts.filter(a=>a.archived);
   return backHead('Cuentas','Una cuenta es cualquier lugar donde tienes dinero o una deuda. Toca una para editarla.')
-  +`<div class="statgrid"><div class="stat"><span>Tienes</span><b class="num">${money(act)}</b></div><div class="stat"><span>Debes</span><b class="num neg">${money(pas)}</b></div></div>`
+  +`<div class="statgrid"><div class="stat"><span>Tienes</span><b class="num">${money(act)}</b></div><div class="stat"><span>Debes</span><b class="num ${pas>0?'neg':'muted'}">${money(pas)}</b></div></div>`
   +G.map(([k,title,f])=>{const list=S.accounts.filter(a=>!a.archived&&f(a));
     return `<div class="grouphead"><h2 class="sect" style="margin:0">${title}</h2><button class="btn sm" data-act="addKind" data-k="${k}">${ic('plus')}Agregar</button></div>
     <div class="card list">${list.length?list.map(a=>{const v=b[a.id]||0;const neg=LIAB.has(a.type);
@@ -1148,6 +1149,7 @@ function vAjustes(){
     <div class="row"><div class="txt"><b>Descargar respaldo cifrado</b><span>${lb?'Último: '+esc(new Date(lb).toLocaleDateString('es-PE')):'Aún no has descargado uno.'} Solo se abre con tu contraseña.</span></div><button class="btn" data-act="backup">Descargar</button></div>
     <div class="row"><div class="txt"><b>Restaurar respaldo</b><span>Reemplaza los datos por los de un archivo de respaldo.</span></div><button class="btn" data-act="restore">Restaurar</button></div>
     <div class="row"><div class="txt"><b>Importar Excel</b><span>De Money Manager u otra app parecida. Los repetidos se omiten.</span></div><button class="btn" data-act="importXlsx">Importar</button></div>
+    <div class="row"><div class="txt"><b>Cargar saldos desde archivo</b><span>Revisa los saldos antes de aplicarlos. Primero se descarga un respaldo cifrado.</span></div><button class="btn" data-act="loadBalances">Cargar</button></div>
     <div class="row"><div class="txt"><b>Exportar a Excel (CSV)</b><span>Todos tus movimientos, sin cifrar.</span></div><button class="btn" data-act="exportCsvAll">Exportar</button></div>
   </div>
   <h2 class="sect">Seguridad</h2>
@@ -1417,7 +1419,7 @@ function personDetail(id){const p=(S.people||[]).find(p=>p.id===id);if(!p)return
 function personForm(p){openModal(`<h2>${p?'Editar':'Agregar'} persona o empresa</h2><div class="field"><label for="pName">Nombre</label><input class="input" id="pName" value="${esc(p?.name)}"></div><div class="field"><label for="pKind">Es una</label><select class="input" id="pKind"><option value="persona">Persona</option><option value="empresa">Empresa</option><option value="banco">Banco</option></select></div><div class="field"><label for="pNote">Nota (opcional)</label><input class="input" id="pNote" value="${esc(p?.note)}"></div>${p?`<label><input id="pArch" type="checkbox" ${p.archived?'checked':''}> Archivar</label>`:''}<div class="err" id="pErr"></div><div class="actions"><button class="btn" id="pCancel">Cancelar</button><button class="btn primary" id="pSave">Guardar</button></div>`,m=>{const q=s=>m.querySelector(s);q('#pKind').value=p?.kind||'persona';q('#pCancel').onclick=closeModal;q('#pSave').onclick=()=>{const name=q('#pName').value.trim();if(!name)return q('#pErr').textContent='Escribe un nombre.';if((S.people||[]).some(x=>x.id!==p?.id&&x.name.toLocaleLowerCase()===name.toLocaleLowerCase()))return q('#pErr').textContent='Ya existe ese nombre.';
     const o={...p,id:p?.id||uid(),name,kind:q('#pKind').value,note:q('#pNote').value.trim(),archived:!!q('#pArch')?.checked};S.people??=[];if(p)S.people[S.people.findIndex(x=>x.id===p.id)]=o;else S.people.push(o);save();closeModal();render();};});}
 const TX_PRESENTATION={reembolso:{name:'Reembolso por cobrar',icon:'clock'},cobro:{name:'Cobro',icon:'download'},prestamo_dado:{name:'Préstamo dado',icon:'loanOut'},prestamo_recibido:{name:'Préstamo recibido',icon:'loanIn'},pago_tarjeta:{name:'Pago de tarjeta',icon:'card'},pago_deuda:{name:'Pago de deuda',icon:'hand'},ajuste:{name:'Ajuste de saldo',icon:'wallet'}};
-function situationRow(t){const k=txKind(t),view=TX_PRESENTATION[k]||{name:'Movimiento',icon:'list'};
+function situationRow(t){const k=txKind(t),view=t.openingUSD?{name:'Saldo inicial en dólares',icon:'wallet'}:TX_PRESENTATION[k]||{name:'Movimiento',icon:'list'};
   const pay=k==='pago_tarjeta'?{minimo:'Pago mínimo',total:'Total del mes',parcial:'Pago parcial'}[t.cardPay]:'';
   const direction=k==='ajuste'?(LIAB.has(acc(t.acc)?.type)?t.amount<0?'Baja la deuda':'Sube la deuda':t.amount<0?'Sube el saldo':'Baja el saldo'):'';
   const detail=[pay,direction,personName(t.person),accName(t.acc),t.to?'→ '+accName(t.to):'',t.note].filter(Boolean).join(' · ');
@@ -1577,6 +1579,7 @@ function reconcileForm(state={}){if(!S)return;const active=S.accounts.filter(a=>
   });
 }
 function adjustmentForm(t){const original=stripU(t),a=acc(t.acc);if(!a){toast('No se encuentra la cuenta de este ajuste.');return;}
+  if(t.openingUSD){openModal(`<h2>Saldo inicial en dólares</h2><p>${esc(a.name)}</p><p class="num">${money(t.openingUSD.amount,'USD')} ≈ ${money(t.amount)}</p><p class="hint">Tipo de cambio al cargar: ${esc(t.openingUSD.rate)}. No cuenta como gasto ni ingreso. Para corregirlo, vuelve a cargar tu archivo de saldos.</p><div class="actions"><button class="btn" id="usdClose">Cerrar</button><button class="btn primary" id="usdLoad">Cargar archivo</button></div>`,m=>{m.querySelector('#usdClose').onclick=closeModal;m.querySelector('#usdLoad').onclick=loadBalancesForm;});return;}
   openModal(`<div class="sheethead"><h2>Ajuste de saldo</h2><button class="iconbtn" id="sClose" aria-label="Cerrar">${ic('x')}</button></div><p>${esc(a.name)}</p><div class="field"><label for="aDirection">¿Qué cambió?</label><select class="input" id="aDirection"><option value="down">${LIAB.has(a.type)?'La deuda subió':'El saldo bajó'}</option><option value="up">${LIAB.has(a.type)?'La deuda bajó':'El saldo subió'}</option></select></div><label class="amtbox"><span class="cur">${a.currency==='USD'?'US$':'S/'}</span><input id="sAmt" type="number" inputmode="decimal" step="0.01" min="0" value="${Math.abs(t.amount)}" aria-label="Monto"></label><div class="field"><label for="sNote">Nota</label><input class="input" id="sNote" value="${esc(t.note)}"></div><div class="field"><label for="sDate">Fecha y hora</label><input class="input" id="sDate" type="datetime-local" value="${esc(t.date)}"></div><div class="err" id="sErr"></div><div class="sheetfoot"><div class="confirmation" id="sConfirm">Este ajuste no cuenta como gasto ni ingreso.</div><button class="btn primary block big" id="sSave">Guardar cambios</button></div>`,m=>{
     m.classList.add('sheet');const q=s=>m.querySelector(s);q('#aDirection').value=t.amount<0?'up':'down';q('#sClose').onclick=closeModal;q('#sSave').onclick=()=>{
       const i=S.tx.findIndex(x=>x.id===t.id),n=r2(+q('#sAmt').value);if(i<0||stripU(S.tx[i])!==original){q('#sErr').textContent='El ajuste cambió en otro equipo. Cierra y vuelve a abrirlo.';return;}
@@ -1998,6 +2001,7 @@ async function doAct(d){
       if(ok){delete S.sync;await persistLocalOnly();setSync('off');render();toast('Sincronización desconectada');}break;}
     case 'installApp':if(window.__installPrompt){const p=window.__installPrompt;window.__installPrompt=null;p.prompt();try{await p.userChoice;}catch(_){}render();}break;
     case 'backup':await doBackup();break;
+    case 'loadBalances':loadBalancesForm();break;
     case 'startOver':startOverForm();break;
     case 'restore':case 'restoreFromLock':$('#fileBackup').value='';$('#fileBackup').click();break;
     case 'importXlsx':$('#fileXlsx').value='';$('#fileXlsx').click();break;
@@ -2010,6 +2014,100 @@ async function doAct(d){
 }
 
 /* ---------- respaldo ---------- */
+// Solo admite campos conocidos; los omitidos o null se conservan como están.
+function initialBalancesPlan(raw){
+  if(!raw||raw.app!=='mis-finanzas-saldos'||raw.v!==1||!Array.isArray(raw.cuentas)||!raw.cuentas.length||raw.cuentas.length>1000)
+    throw new Error('Ese archivo no es de saldos de Mis Finanzas (versión 1).');
+  if(typeof raw.fecha!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(raw.fecha)||!Number.isFinite(Date.parse(raw.fecha))||new Date(raw.fecha).toISOString().slice(0,10)!==raw.fecha)
+    throw new Error('El archivo debe indicar una fecha válida (AAAA-MM-DD).');
+  const seen=new Set(),b=balances(),rows=[];let {act,pas}=netWorth();
+  for(const entry of raw.cuentas){
+    if(!entry||typeof entry.name!=='string'||!entry.name||seen.has(entry.name))throw new Error('Hay una cuenta sin nombre o repetida en el archivo.');
+    seen.add(entry.name);const matches=S.accounts.filter(a=>a.name===entry.name);
+    if(matches.length!==1)throw new Error(matches.length?`El nombre ${entry.name} es ambiguo. Revisa tus cuentas.`:`No existe la cuenta: ${entry.name}. No se aplicó nada.`);
+    const a=matches[0],liab=LIAB.has(a.type);
+    if(!['banco','efectivo','ahorro','inversion','tarjeta','porpagar'].includes(a.type))throw new Error(`No se admite este tipo de cuenta: ${entry.name}.`);
+    const fields=liab?(a.type==='tarjeta'?['debes','debesUSD','linea','corte','pago','minimo','tea']:['debes','cuota','cuotasFaltan','pago','tea']):['saldo'];
+    for(const key of Object.keys(entry))if(key!=='name'&&!fields.includes(key))throw new Error(`Campo no válido para ${entry.name}: ${key}.`);
+    const openings=S.tx.filter(t=>t.acc===a.id&&t.openingUSD);if(openings.length>1)throw new Error(`Hay más de un saldo inicial en dólares en ${entry.name}. Revísalos antes de continuar.`);
+    const oldOpening=openings[0],oldEffect=oldOpening?accountParts(oldOpening).filter(l=>l.acc===a.id).reduce((s,l)=>s+l.amount,0):0;
+    const patch={},debt={...(a.debt||{})};let desired=b[a.id]||0,changed=false,openingTx=oldOpening;
+    for(const key of fields){const n=entry[key];if(n==null)continue;
+      const day=['corte','pago'].includes(key),integer=day||key==='cuotasFaltan';
+      if(typeof n!=='number'||!Number.isFinite(n)||!Number.isSafeInteger(Math.round(n*100))||(key!=='saldo'&&n<0)||integer&&!Number.isInteger(n)||day&&(n<1||n>31))
+        throw new Error(`Revisa ${key} de ${entry.name}: el valor no es válido.`);
+      if(!integer&&Math.abs(n*100-Math.round(n*100))>0.00001)throw new Error(`Revisa ${key} de ${entry.name}: usa como máximo dos decimales.`);
+      changed=true;
+      if(key==='saldo'||key==='debes'){desired=key==='debes'?-n+oldEffect:n;patch.initial=r2(desired-((b[a.id]||0)-(+a.initial||0)));}
+      else if(key==='debesUSD'){
+        if(a.currency!=='PEN')throw new Error(`debesUSD se usa en tarjetas en soles: ${entry.name}.`);
+        const rate=+S.settings.tc;if(!(rate>0)||!Number.isFinite(rate)||!Number.isSafeInteger(Math.round(n*rate*100)))throw new Error('Revisa el tipo de cambio de la app antes de cargar dólares.');
+        const pen=r2(n*rate);
+        // amount y currency conservan el efecto en la cuenta PEN para que la
+        // versión anterior calcule el mismo saldo. openingUSD guarda el original.
+        if(n>0||oldOpening)openingTx={...oldOpening,id:oldOpening?.id||'saldo-usd-'+a.id,kind:'ajuste',type:'transfer',date:raw.fecha+'T00:00',acc:a.id,currency:'PEN',amount:pen,pen,
+          openingUSD:{amount:n,rate},note:'Saldo inicial en dólares',desc:`${money(n,'USD')} al tipo de cambio ${rate}`};
+        desired+=-pen-oldEffect;
+      }
+      else{const map={linea:'limit',corte:'cutDay',pago:'dueDay',minimo:'minimum',cuota:'cuota',cuotasFaltan:'cuotasRest',tea:'tea'};debt[map[key]]=n;patch.debt=debt;}
+    }
+    if(a.type==='tarjeta'&&patch.debt&&debt.cutDay&&debt.cutDay===debt.dueDay)throw new Error(`El día de corte y el de pago no pueden ser iguales: ${entry.name}.`);
+    if(!changed)continue;
+    const delta=toPEN(desired-(b[a.id]||0),a.currency);if(liab)pas-=delta;else act+=delta;
+    rows.push({id:a.id,name:a.name,currency:a.currency,liab,before:b[a.id]||0,after:desired,oldDebt:a.debt||{},patch,oldOpening,openingTx:entry.debesUSD!=null?openingTx:undefined});
+  }
+  if(!rows.length)throw new Error('El archivo no tiene campos completos para cargar. Los campos en blanco no se tocan.');
+  return {rows,act:r2(act),pas:r2(pas),fecha:raw.fecha};
+}
+function initialBalancesPreview(plan){
+  const labels={limit:'Línea',cutDay:'Corte',dueDay:'Pago',minimum:'Mínimo',cuota:'Cuota',cuotasRest:'Cuotas que faltan',tea:'TEA %'};
+  const cell=(r,after)=>{const val=after?r.after:r.before,d=after?r.patch.debt:r.oldDebt,opening=after?(r.openingTx||r.oldOpening):r.oldOpening;
+    const details=r.patch.debt?Object.keys(labels).filter(k=>r.patch.debt[k]!==r.oldDebt[k]).map(k=>`${labels[k]}: ${d?.[k]??'sin dato'}`).join(' · '):'';
+    const balance=opening?`${money(r2(-val-opening.amount))} + ${money(opening.openingUSD.amount,'USD')} (≈ ${money(opening.amount)}) = ${money(-val)}`:money(r.liab?-val:val,r.currency);
+    return `<b class="num" style="white-space:normal">${r.liab?'Debes ':''}${balance}</b>${details?`<div class="tiny muted">${esc(details)}</div>`:''}`;};
+  return `<p class="small muted">Saldos del ${esc(plan.fecha)}. Cada monto está en la moneda de su cuenta. Los campos omitidos se conservan.</p>
+    <table style="width:100%;table-layout:fixed;border-collapse:collapse;font-size:13px"><thead><tr><th scope="col" style="text-align:left">Cuenta</th><th scope="col" style="text-align:left">Ahora</th><th scope="col" style="text-align:left">Quedará</th></tr></thead><tbody>${plan.rows.map(r=>`<tr>${[`${esc(r.name)}<div class="tiny muted">${esc(r.currency)}</div>`,cell(r,false),cell(r,true)].map(c=>`<td style="padding:12px 3px;border-top:1px solid var(--line);overflow-wrap:anywhere;vertical-align:top">${c}</td>`).join('')}</tr>`).join('')}</tbody></table>
+    <div class="statgrid" style="margin-top:16px"><div class="stat"><span>Tienes</span><b class="num">${money(plan.act)}</b></div><div class="stat"><span>Debes</span><b class="num ${plan.pas>0?'neg':'muted'}">${money(plan.pas)}</b></div></div><p class="hint">Totales de todas tus cuentas y Personas, en soles con tu tipo de cambio actual. ${plan.rows.some(r=>r.openingTx)?'La deuda en dólares se guarda como un único saldo inicial por tarjeta, sin gasto ni presupuesto.':'No se crean movimientos.'}</p>`;
+}
+function loadBalancesForm(){
+  openModal(`<h2>Cargar saldos desde archivo</h2><p>Elige tu archivo privado y revisa cómo quedarán tus cuentas. Antes de aplicar se descarga un respaldo cifrado.</p>
+    <div class="field"><label for="balancesFile">Archivo de saldos (.json)</label><input class="input" type="file" id="balancesFile" accept=".json,application/json"></div>
+    <div id="balancesPreview"></div><div class="err" id="balancesErr" role="alert"></div><div class="actions"><button class="btn" id="balancesCancel">Cancelar</button><button class="btn primary" id="balancesApply" disabled>Aplicar</button></div>`,m=>{
+    const q=s=>m.querySelector(s);let raw=null,previewState=null,busy=false,selection=0;
+    const preview=()=>{const plan=initialBalancesPlan(raw);q('#balancesPreview').innerHTML=initialBalancesPreview(plan);previewState=canon(S);return plan;};
+    q('#balancesCancel').onclick=closeModal;
+    q('#balancesFile').onchange=async()=>{const ticket=++selection,file=q('#balancesFile').files[0];raw=null;q('#balancesApply').disabled=true;q('#balancesErr').textContent='';q('#balancesPreview').innerHTML='';
+      try{if(!file)return;if(file.size>2*1024*1024)throw new Error('El archivo es demasiado grande (máximo 2 MB).');const parsed=JSON.parse(await file.text());if(ticket!==selection)return;
+        raw=parsed;preview();q('#balancesApply').disabled=false;
+      }catch(e){if(ticket===selection){raw=null;q('#balancesErr').textContent=e instanceof SyntaxError?'El archivo no contiene un JSON válido.':e.message;}}};
+    q('#balancesApply').onclick=async()=>{if(busy||!raw)return;
+      if(IS_NATIVE){q('#balancesErr').textContent='Hazlo desde Edge en tu PC para descargar el respaldo. Después sincroniza el celular.';return;}
+      busy=true;for(const id of ['balancesApply','balancesCancel','balancesFile'])q('#'+id).disabled=true;$('#app').inert=true;q('#balancesErr').textContent='';let committed=false;
+      try{await syncBeforeDataChange();if(!m.isConnected||!S||!KEY)throw new Error('Vuelve a abrir la app antes de continuar.');
+        if(canon(S)!==previewState){preview();throw new Error('Llegaron cambios de tus equipos. Revisa la tabla actualizada y vuelve a tocar Aplicar.');}
+        const plan=initialBalancesPlan(raw),original=S;await doBackup();clearTimeout(saveTimer);
+        if(S!==original||!KEY||!m.isConnected)throw new Error('La app se bloqueó o cerraste la confirmación. Vuelve a abrirla antes de continuar.');
+        const next=structuredClone(S);next.settings.u=Math.max(Date.now(),(next.settings.u||0)+1);
+        for(const r of plan.rows){const a=next.accounts.find(a=>a.id===r.id);Object.assign(a,r.patch);a.u=Math.max(Date.now(),(a.u||0)+1);
+          if(r.openingTx){const t={...r.openingTx,u:Math.max(Date.now(),(r.oldOpening?.u||0)+1)},i=next.tx.findIndex(x=>x.id===t.id);if(i<0)next.tx.push(t);else next.tx[i]=t;}}
+        const vault=await sealWith(KEY,SALT,next);if(S!==original||!KEY||!m.isConnected)throw new Error('La app cambió. Vuelve a revisar los saldos.');
+        if(!lsSet(VAULT_KEY,JSON.stringify(vault)))throw new Error('No se pudo guardar. Revisa el espacio del navegador.');
+        S=next;committed=true;sortTx();takeSnap();await persist();clearTimeout(SYNC.timer);await syncNow();
+        if(!S)return;render();openModal(`<h2>Saldos cargados en ${plan.rows.length} cuentas</h2><p>${SYNC.st==='ok'?'Tu celular los verá al sincronizar.':'Se guardaron en esta PC, pero falta sincronizar. Revisa Más → Celular y sincronización.'}</p><div class="actions"><button class="btn primary" id="balancesDone">Entendido</button></div>`,el=>el.querySelector('#balancesDone').onclick=closeModal);
+      }catch(e){if(m.isConnected){q('#balancesErr').textContent=(committed?'Los saldos se guardaron. Revisa la sincronización. ':'No se aplicaron saldos. ')+e.message;
+        if(S)try{preview();}catch(_){raw=null;}}}
+      finally{$('#app').inert=false;busy=false;if(m.isConnected){q('#balancesCancel').disabled=false;q('#balancesFile').disabled=false;q('#balancesApply').disabled=!raw;}}};
+  });
+}
+async function syncBeforeDataChange(){
+  clearTimeout(saveTimer);await saving;
+  if(SYNC.busy)throw new Error('Espera a que termine la sincronización y vuelve a intentarlo.');
+  clearTimeout(SYNC.timer);
+  if(!S?.sync?.token)throw new Error('Primero arregla la sincronización (Más → Celular y sincronización)');
+  await persist();clearTimeout(SYNC.timer);await syncNow();clearTimeout(SYNC.timer);
+  // syncNow informa los errores en SYNC; no lanza una excepción ante un 401.
+  if(SYNC.st!=='ok')throw new Error('Primero arregla la sincronización (Más → Celular y sincronización)');
+}
 // La plantilla solo se lee del archivo elegido. Nunca forma parte de la app publicada.
 function readStartTemplate(raw){
   const fail=()=>{throw new Error('Ese archivo no es una plantilla válida de Mis Finanzas (versión 1).');};
@@ -2049,8 +2147,7 @@ function startOverForm(){
       if(IS_NATIVE){q('#resetErr').textContent='Hazlo desde Edge en tu PC para descargar el respaldo. Después sincroniza el celular.';return;}
       busy=true;update();q('#resetCancel').disabled=true;q('#resetFile').disabled=true;q('#resetConfirm').disabled=true;$('#app').inert=true;
       let original=S,committed=false;
-      try{clearTimeout(saveTimer);await saving;if(SYNC.busy)throw new Error('Espera a que termine la sincronización y vuelve a intentarlo.');
-        clearTimeout(SYNC.timer);await persist();clearTimeout(SYNC.timer);await syncNow();clearTimeout(SYNC.timer);original=S;await doBackup();clearTimeout(saveTimer);
+      try{await syncBeforeDataChange();original=S;await doBackup();clearTimeout(saveTimer);
         if(S!==original||!KEY||!m.isConnected)throw new Error('La app se bloqueó o cerraste la confirmación. Vuelve a abrirla antes de continuar.');
         const fresh=blankState(),now=Math.max(Date.now(),(S.catsReplacement?.at||0)+1),next={...S,...fresh,settings:{...S.settings},sync:S.sync,del:{...S.del},catDel:{...S.catDel}};
         // Estos ids se retiran definitivamente: incluso una edición tardía del
@@ -2064,7 +2161,8 @@ function startOverForm(){
         next.catsReplacement={at:now,cats:structuredClone(next.cats)};next.catsReplacedAt=now;
         next.settings.budgets=Object.fromEntries(Object.entries(next.settings.budgets||{}).filter(([cat])=>Object.hasOwn(next.cats.gasto,cat)));delete next.settings.checkedAt;delete next.settings.lastAccByKind;next.settings.u=now;
         // Guarda primero la nueva bóveda: un fallo de almacenamiento deja intacto S.
-        const vault=await sealWith(KEY,SALT,next);if(!lsSet(VAULT_KEY,JSON.stringify(vault)))throw new Error('No se pudo guardar. No se borró nada; revisa el espacio del navegador.');
+        const vault=await sealWith(KEY,SALT,next);if(S!==original||!KEY||!m.isConnected)throw new Error('La app cambió. Vuelve a revisar la confirmación.');
+        if(!lsSet(VAULT_KEY,JSON.stringify(vault)))throw new Error('No se pudo guardar. No se borró nada; revisa el espacio del navegador.');
         S=next;committed=true;takeSnap();let prefs={};try{prefs=JSON.parse(lsGet(PREF_KEY)||'{}');}catch(_){}delete prefs.lastAccByKind;delete prefs.lastAcc;lsSet(PREF_KEY,JSON.stringify(prefs));
         ui.month=monthKey(nowLocal());ui.f={q:'',type:'',acc:'',cat:''};ui.tab='resumen';await persist();clearTimeout(SYNC.timer);await syncNow();
         if(!S)return;
