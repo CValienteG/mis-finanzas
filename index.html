@@ -466,6 +466,8 @@ details.dmore summary::-webkit-details-marker{display:none}
 .entry-panel{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:14px;margin-top:14px;scroll-margin-bottom:12px}.panel-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}.keypad{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:12px 0}.keypad button{min-height:48px;background:var(--bg);border:0;border-radius:10px;font-size:22px}.calculator-display{font-size:26px;font-weight:650;text-align:right;overflow-wrap:anywhere}.entry-panel .keypad-value{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}.entry-final .sheetfoot{position:static;box-shadow:none;background:none;margin-top:14px}.entry-final .confirmation{background:var(--card);color:var(--ink)}
 .entry-panel select{position:static!important;opacity:1!important;width:100%!important;height:auto!important;margin-bottom:12px}.account-picker{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.account-picker h3{grid-column:1/-1;margin:10px 0 0;font-size:13px;color:var(--muted)}.account-picker button{white-space:normal;text-align:left;justify-content:flex-start;overflow-wrap:anywhere}.entry-panel input{max-width:100%}.other-situations{display:grid;gap:8px}.other-situations button{text-align:left;justify-content:flex-start;min-height:52px}
 .tx{grid-template-columns:minmax(70px,.85fr) minmax(80px,1.15fr) auto;gap:9px}.tx-category{min-width:0;display:flex;flex-direction:column}.tx .t1{font-size:13px;font-weight:500}.tx .t2{font-size:11.5px}.tx .amt{font-size:13px}.tx.situation .amt.neg{color:var(--neg)}.tx.situation .amt.pos{color:var(--pos)}.tx.situation .amt.xfer{color:var(--ink)}.dayhdr{flex-wrap:wrap;gap:4px;font-size:12px}.detail-amount{font-size:28px}.backdrop .modal{position:relative}.entry-panel #subChips{display:flex}
+
+.home-block{display:block;margin-top:14px;cursor:pointer}.block-value{display:block;font-size:26px;font-weight:700;margin:4px 0}.home-summary{cursor:pointer;margin-top:14px}.account-entry{padding:14px 0;border-bottom:1px solid var(--line);cursor:pointer;overflow-wrap:anywhere}.account-entry:last-child{border:0}.account-entry>div{margin-top:6px}.card-columns{display:grid;grid-template-columns:1fr 1fr;gap:12px}.card-columns>span{font-size:12px;color:var(--muted)}.card-columns b{display:block;font-size:16px;color:var(--ink);white-space:normal}.card-columns b.neg{color:var(--neg)}.dcard{cursor:pointer}.dcard .dbig{font-size:20px}.dcard .dbig b{white-space:normal}.drow{flex-wrap:wrap}.monthbar h2{font-size:20px}.sumline .val{white-space:normal}.monthbar .iconbtn{flex-shrink:0}
 </style>
 </head>
 <body>
@@ -934,7 +936,7 @@ function render(){
 }
 $('#tabs').onclick=e=>{const b=e.target.closest('button');if(!b||!b.dataset.tab)return;navigate(b.dataset.tab);};
 
-function monthBar(extra=''){return `<div class="monthbar"><h2>${esc(monthLabel(ui.month))}</h2><button class="iconbtn" data-act="mprev" aria-label="Mes anterior">${ic('left')}</button><button class="iconbtn" data-act="mnext" aria-label="Mes siguiente">${ic('right')}</button><div class="spacer"></div>${extra}</div>`;}
+function monthBar(extra=''){return `<div class="monthbar"><button class="iconbtn" data-act="mprev" aria-label="Mes anterior">${ic('left')}</button><h2>${esc(monthLabel(ui.month))}</h2><button class="iconbtn" data-act="mnext" aria-label="Mes siguiente">${ic('right')}</button><div class="spacer"></div>${extra}</div>`;}
 
 function monthTotals(mk){
   let ing=0,gas=0;const byCat={},byInc={};
@@ -944,10 +946,10 @@ function monthTotals(mk){
   return {ing,gas,byCat,byInc};
 }
 function netWorth(){
-  const b=balances();let act=0,pas=0;
-  for(const a of S.accounts){const v=toPEN(b[a.id]||0,a.currency);if(LIAB.has(a.type)){pas+=-v}else act+=v;}
+  const b=balances();let act=0,pas=0,retained=0;
+  for(const a of S.accounts){const v=toPEN(b[a.id]||0,a.currency);if(LIAB.has(a.type)){pas+=-v}else if(a.noDisponible)retained+=v;else act+=v;}
   const p=peopleTotals();act+=p.receivable;pas+=p.payable;
-  return {act,pas,b};
+  return {act:r2(act),pas:r2(pas),retained:r2(retained),b};
 }
 
 /* ---------- instalación como app ---------- */
@@ -992,42 +994,6 @@ function budgetRows(mk){
   const B=S.settings.budgets||{};const {byCat}=monthTotals(mk);
   return Object.entries(B).filter(([,v])=>+v>0).map(([c,lim])=>({c,lim:+lim,sp:byCat[c]||0})).sort((a,b)=>b.sp/b.lim-a.sp/a.lim);
 }
-function vResumen(){
-  const mk=ui.month;const {ing,gas,byCat}=monthTotals(mk);const net=ing-gas;
-  const {act,pas}=netWorth();
-  const B=budgetRows(mk);const btot=B.reduce((s,x)=>s+x.lim,0);
-  const cats=Object.entries(byCat).sort((a,b)=>b[1]-a[1]);const maxC=cats[0]?.[1]||1;
-  const nice=c=>c.charAt(0)+c.slice(1).toLowerCase();
-  const setup=vSetup();const al=debtAlerts().filter(x=>!(setup&&x.lvl==='info'));
-  const icn={bad:'alert',warn:'clock',info:'info'};
-  const cf=cashflow(30);const up=cf.ev.filter(e=>e.kind!=='in').slice(0,4);const today=todayStr();
-  const isCur=mk===monthKey(nowLocal());
-  const months=[];for(let i=5;i>=0;i--)months.push(shiftMonth(mk,-i));
-  const tr=months.map(m=>({m,...monthTotals(m)}));const maxT=Math.max(1,...tr.map(x=>Math.max(x.ing,x.gas)));
-  return vInstall()
-  +(al.length?`<div class="alerts">${al.map(x=>`<div class="alert ${x.lvl}" data-act="${x.act||'goto'}" data-tab="${x.tab||'deudas'}">${ic(icn[x.lvl])}<span>${esc(x.txt)}</span></div>`).join('')}</div>`:'')
-  +setup+peopleHome()
-  +`<section class="month">
-    <div class="monthnav"><button class="iconbtn" data-act="mprev" aria-label="Mes anterior">${ic('left')}</button><b>${esc(monthLabel(mk))}</b><button class="iconbtn" data-act="mnext" aria-label="Mes siguiente">${ic('right')}</button></div>
-    <div class="spent"><span>${isCur?'Este mes gastaste':'Gastaste'}</span><b class="num">${money(gas)}</b>
-      ${btot?`<div class="track lg"><div class="fill ${gas>btot?'':'u-ok'}" style="width:${Math.min(100,gas/btot*100).toFixed(1)}%"></div></div><em>${gas>btot?`Te pasaste ${money(gas-btot)} de tu presupuesto (${money(btot)})`:`Te quedan ${money(btot-gas)} de tu presupuesto de ${money(btot)}`}</em>`:`<em><button class="linkbtn" data-act="goto" data-tab="budget">Define un presupuesto</button> para saber cuánto te queda.</em>`}</div>
-    <div class="minis"><div><span>Entró</span><b class="num pos">${money(ing)}</b></div><div><span>Te quedó</span><b class="num ${net<0?'neg':''}">${net<0?'−':''}${money(Math.abs(net))}</b></div></div>
-  </section>`
-  +(up.length?`<section class="card"><div class="cardhead"><h3>Próximos pagos</h3><button class="linkbtn" data-act="goto" data-tab="deudas">Ver todo</button></div>
-    ${up.map(e=>{const k=daysBetween(today,e.date);return `<div class="payrow" data-act="goto" data-tab="deudas"><div class="pdate"><b>${+e.date.slice(8,10)}</b><span>${esc(fmtD(e.date,{month:'short'}).replace('.',''))}</span></div><div class="pname"><b>${esc(e.name.replace(/^Pagar\s+/,''))}</b><span class="${k<=3?'neg':''}">${k===0?'Vence hoy':k===1?'Vence mañana':`En ${k} días`}${e.est?' · estimado':''}</span></div><b class="num">${money(Math.abs(e.amt))}</b></div>`;}).join('')}
-    ${cf.min<0?`<div class="cfsum bad" style="margin-top:10px">Con lo que tienes, el ${esc(fmtD(cf.minDate,{day:'numeric',month:'long'}))} te faltarían <b>${money(-cf.min)}</b>.</div>`:''}</section>`:'')
-  +(B.length?`<section class="card"><div class="cardhead"><h3>Presupuesto</h3><button class="linkbtn" data-act="goto" data-tab="budget">Editar</button></div>
-    ${B.map(x=>{const p=x.sp/x.lim;return `<div class="budrow" data-act="filterCat" data-cat="${esc(x.c)}"><div class="bt"><b>${esc(nice(x.c))}</b><span class="num ${p>1?'neg':''}">${money(x.sp)} <span class="muted">de ${money(x.lim)}</span></span></div><div class="track"><div class="fill ${p>1?'':p>0.85?'u-warn':'u-ok'}" style="width:${Math.min(100,p*100).toFixed(1)}%"></div></div></div>`;}).join('')}</section>`:'')
-  +`<section class="card"><div class="cardhead"><h3>En qué gastaste</h3><button class="linkbtn" data-act="goto" data-tab="movs">Movimientos</button></div>
-    ${cats.length?cats.slice(0,8).map(([c,v])=>`<div class="barrow" data-act="filterCat" data-cat="${esc(c)}"><div class="bname">${esc(nice(c))}</div><div class="track"><div class="fill" style="width:${(v/maxC*100).toFixed(1)}%"></div></div><div class="bval num">${money(v)}</div></div>`).join(''):'<div class="empty small"><b>Sin gastos este mes</b>Toca el botón + para registrar uno.</div>'}</section>
-  <section class="card"><div class="cardhead"><h3>Tu dinero hoy</h3><button class="linkbtn" data-act="goto" data-tab="cuentas">Cuentas</button></div>
-    <div class="minis plain"><div><span>Tienes</span><b class="num">${money(act)}</b></div><div><span>Debes en total</span><b class="num ${pas>0?'neg':'muted'}">${money(pas)}</b></div></div>
-    <p class="tiny muted" style="margin:8px 0 0">"Tienes" suma tu dinero, inversiones y lo que te deben. "Debes en total" suma tarjetas, préstamos y deudas de Personas, incluidas las cuentas archivadas. En Deudas ves solo tarjetas y préstamos activos.</p></section>
-  <section class="card"><h3>Últimos 6 meses</h3>
-    <div class="trend">${tr.map(x=>`<div class="tcol"><div class="tbars"><div class="tbar i" style="height:${(x.ing/maxT*100).toFixed(1)}%"></div><div class="tbar g" style="height:${(x.gas/maxT*100).toFixed(1)}%"></div></div><div class="tlbl">${esc(new Date(+x.m.slice(0,4),+x.m.slice(5)-1,1).toLocaleDateString('es-PE',{month:'short'}).replace('.',''))}</div></div>`).join('')}</div>
-    <div class="legend"><span><i style="background:var(--pos)"></i>Entró</span><span><i style="background:var(--neg)"></i>Gastaste</span></div></section>`;
-}
-
 function greeting(){const h=new Date().getHours();return h<12?'Buenos días':h<19?'Buenas tardes':'Buenas noches';}
 
 function filteredTx(){
@@ -1070,19 +1036,6 @@ function vMas(){
   return `<h1 class="page">Más</h1><nav class="menu more-grid">${items.map(([t,i,ti,d])=>`<button data-act="goto" data-tab="${t}"><span class="kic">${ic(i)}</span><span class="ktx"><b>${ti}</b><span>${d}</span></span>${ic('chev')}</button>`).join('')}</nav>
   ${!IS_STANDALONE()&&(window.__installPrompt||IS_ANDROID)?`<div style="margin-top:14px">${vInstall()}</div>`:''}
   <button class="btn block" style="margin-top:14px" data-act="lock">${ic('lock')}Bloquear la app</button>`;
-}
-function vCuentas(){
-  const {act,pas,b}=netWorth();
-  const G=[['dinero','Tu dinero',a=>['banco','efectivo','ahorro','inversion'].includes(a.type)],['tarjeta','Tarjetas de crédito',a=>a.type==='tarjeta'],['prestamo','Préstamos y deudas',a=>a.type==='porpagar'],['tedeben','Te deben',a=>a.type==='porcobrar']];
-  const arch=S.accounts.filter(a=>a.archived);
-  return backHead('Cuentas','Una cuenta es cualquier lugar donde tienes dinero o una deuda. Toca una para editarla.')
-  +`<div class="statgrid"><div class="stat"><span>Tienes</span><b class="num">${money(act)}</b></div><div class="stat"><span>Debes</span><b class="num ${pas>0?'neg':'muted'}">${money(pas)}</b></div></div>`
-  +G.map(([k,title,f])=>{const list=S.accounts.filter(a=>!a.archived&&f(a));
-    return `<div class="grouphead"><h2 class="sect" style="margin:0">${title}</h2><button class="btn sm" data-act="addKind" data-k="${k}">${ic('plus')}Agregar</button></div>
-    <div class="card list">${list.length?list.map(a=>{const v=b[a.id]||0;const neg=LIAB.has(a.type);
-      return `<div class="acct" data-act="editAcc" data-id="${a.id}"><span class="nm">${esc(a.name)}${a.currency!=='PEN'?' <span class="pill">US$</span>':''}<span class="sub2 tiny">${checkedLabel(a)}</span></span><span class="num ${neg&&v<0?'neg':''}">${neg?(v<0?'Debes ':'')+money(Math.abs(v),a.currency):money(v,a.currency)}</span>${ic('chev')}</div>`;}).join('')
-      :`<p class="muted small" style="margin:4px 0">${KINDS[k].d}</p>`}</div>`;}).join('')
-  +(arch.length?`<details class="dmore" style="margin-top:14px"><summary>Cuentas ocultas (${arch.length})</summary><div class="card list">${arch.map(a=>`<div class="acct" data-act="editAcc" data-id="${a.id}"><span class="nm">${esc(a.name)}</span>${ic('chev')}</div>`).join('')}</div></details>`:'');
 }
 function vCats(){
   const type=ui.catType||'gasto';const nice=c=>c.charAt(0)+c.slice(1).toLowerCase();const B=S.settings.budgets||{};
@@ -1621,7 +1574,7 @@ function situationAdapter(kind,existing,pre={}){
     if(isCardPay)q('#sPayKinds').onclick=e=>{const btn=e.target.closest('[data-pay]');if(!btn)return;const b=acc(q('#sTo').value),a=acc(q('#sAcc').value),info=b?cardInfo(b,todayStr(),existing?.id):null;const pay=btn.dataset.pay;
       if(pay==='total'&&!info?.ok){q('#sErr').textContent='Configura los días de corte y pago de esta tarjeta o usa Otro monto.';return;}
       if(pay==='minimo'&&!info?.minimum){cardPay=pay;q('#sErr').textContent='Escribe el mínimo que indica tu banco. También puedes guardarlo en la ficha de tu tarjeta.';update();return;}
-      cardPay=pay;q('#sErr').textContent='';const value=pay==='minimo'?info.minimum:pay==='total'?info.pending:null;if(value!==null){if(a?.currency===b?.currency)q('#sAmt').value=r2(value);else q('#sToAmt').value=r2(value);}update();};
+      cardPay=pay;q('#sErr').textContent='';const value=pay==='minimo'?info.minimumPending:pay==='total'?info.pending:null;if(value!==null){if(a?.currency===b?.currency)q('#sAmt').value=r2(value);else q('#sToAmt').value=r2(value);}update();};
     // Un mínimo escrito a mano conserva su significado; editar un total lo vuelve parcial.
     m.oninput=e=>{if(cardPay==='total'&&['sAmt','sToAmt'].includes(e.target.id))cardPay='parcial';update();};
     q('#sSave').onclick=()=>{const a=acc(q('#sAcc').value),b=transfer?acc(q('#sTo').value):null,amount=r2(+q('#sAmt').value),p=selectedPerson(),r=kind==='cobro'?relation():null;
@@ -1766,10 +1719,12 @@ function accountForm(kind,a){
       <div class="field"><label for="dMin">Pago mínimo del estado de cuenta (opcional)</label><input class="input num" id="dMin" type="number" inputmode="decimal" step="0.01" min="0" value="${esc(d.minimum||'')}"><div class="hint">Escribe el monto que indica tu banco; actualízalo cada mes.</div></div>
       <div class="two"><div class="field"><label>Día de corte</label><input class="input" id="dCut" type="number" inputmode="numeric" min="1" max="31" value="${esc(d.cutDay||'')}" placeholder="1–31"><div class="hint">Cuando se cierra tu estado de cuenta.</div></div>
       <div class="field"><label>Día de pago</label><input class="input" id="dDue" type="number" inputmode="numeric" min="1" max="31" value="${esc(d.dueDay||'')}" placeholder="1–31"><div class="hint">Fecha límite para pagar.</div></div></div>`:''}
+    ${kind==='tarjeta'?`<div class="field"><label for="dBusiness">Si cae en fin de semana o feriado</label><select class="input" id="dBusiness">${[['anterior','Día hábil anterior'],['siguiente','Día hábil siguiente'],['mismo','El mismo día']].map(([v,l])=>`<option value="${v}" ${cardDayRule(a)===v?'selected':''}>${l}</option>`).join('')}</select></div><div class="field"><label for="dMinRatio">Porcentaje estimado del mínimo</label><input class="input" id="dMinRatio" type="number" min="0" max="100" step="0.01" value="${r2((d.minimumRatio??.05)*100)}"></div>`:''}
     ${kind==='prestamo'?`<div class="two"><div class="field"><label>Cuota mensual</label><input class="input num" id="dCuota" type="number" inputmode="decimal" step="0.01" min="0" value="${esc(d.cuota||'')}"></div>
       <div class="field"><label>Día de pago</label><input class="input" id="dDue" type="number" inputmode="numeric" min="1" max="31" value="${esc(d.dueDay||'')}" placeholder="1–31"></div></div>
       <div class="field"><label>Cuotas que faltan <span class="muted">(opcional)</span></label><input class="input" id="dRest" type="number" inputmode="numeric" min="0" value="${esc(d.cuotasRest||'')}"></div>
       ${isNew&&src.length?`<div class="field"><label>¿Esta deuda ya estaba anotada en otra cuenta?</label><select class="input" id="lSrc"><option value="">No, es nueva</option>${src.map(x=>`<option value="${x.id}">Sí, dentro de ${esc(x.name)}</option>`).join('')}</select><div class="hint">Si eliges una, el saldo se pasa a este préstamo para no contar la deuda dos veces.</div></div>`:''}`:''}
+    ${kind==='dinero'?`<label class="small" style="display:flex;align-items:center;gap:8px;min-height:44px"><input type="checkbox" id="aRetained" ${a.noDisponible?'checked':''}> Ahorro retenido (no disponible)</label>`:''}
     <details class="more"><summary>Más opciones</summary>
       <div class="two" style="margin-top:8px"><div class="field"><label>Moneda</label><select class="input" id="aCur"${used?' disabled':''}><option value="PEN"${a.currency==='PEN'?' selected':''}>Soles (S/)</option><option value="USD"${a.currency==='USD'?' selected':''}>Dólares (US$)</option></select></div>
       ${kind==='tarjeta'||kind==='prestamo'?`<div class="field"><label>TEA %</label><input class="input num" id="dTea" type="number" step="0.01" min="0" value="${esc(d.tea||'')}" placeholder="Ej. 89.9"></div>`:'<div></div>'}</div>
@@ -1789,11 +1744,12 @@ function accountForm(kind,a){
       if(S.accounts.some(x=>x.name.toUpperCase()===name&&x.id!==a.id))return err.textContent='Ya tienes una cuenta con ese nombre.';
       const day=v=>{if(!v)return null;const n=parseInt(v);return n>=1&&n<=31?n:NaN;};
       const o={...a,name,currency:q('#aCur').value,archived:q('#aArch')?.checked||false,debt:{...d}};
-      if(kind==='tarjeta'){o.debt.limit=parseFloat(q('#dLim').value)||null;o.debt.minimum=parseFloat(q('#dMin').value)||null;o.debt.cutDay=day(q('#dCut').value);o.debt.dueDay=day(q('#dDue').value);
+      if(kind==='tarjeta'){o.debt.businessDay=q('#dBusiness').value;o.debt.minimumRatio=r2(Math.max(0,Math.min(100,+q('#dMinRatio').value)))/100;o.debt.limit=parseFloat(q('#dLim').value)||null;o.debt.minimum=parseFloat(q('#dMin').value)||null;o.debt.cutDay=day(q('#dCut').value);o.debt.dueDay=day(q('#dDue').value);
         if(Number.isNaN(o.debt.cutDay)||Number.isNaN(o.debt.dueDay))return err.textContent='Los días deben estar entre 1 y 31.';
         if(o.debt.cutDay&&o.debt.cutDay===o.debt.dueDay)return err.textContent='El día de corte y el de pago no pueden ser iguales.';}
       if(kind==='prestamo'){o.debt.cuota=parseFloat(q('#dCuota').value)||null;o.debt.dueDay=day(q('#dDue').value);o.debt.cuotasRest=parseInt(q('#dRest').value)||null;
         if(Number.isNaN(o.debt.dueDay))return err.textContent='El día de pago debe estar entre 1 y 31.';}
+      if(q('#aRetained'))o.noDisponible=q('#aRetained').checked;
       if(q('#dTea'))o.debt.tea=parseFloat(q('#dTea').value)||null;
       if(isNew){const v=r2(parseFloat(q('#aBal').value)||0);o.id=uid();const neg=kind==='tarjeta'||kind==='prestamo';
         const srcId=q('#lSrc')?.value;o.initial=srcId?0:(neg?-v:v);S.accounts.push(o);
@@ -1833,25 +1789,6 @@ const liabs=()=>S.accounts.filter(a=>LIAB.has(a.type)&&!a.archived);
 const isCard=a=>a.type==='tarjeta';
 
 /* estado de una tarjeta */
-function cardInfo(a,today=todayStr(),exclude){
-  const d=a.debt||{};const debt=Math.max(0,-(balances(exclude)[a.id]||0));
-  const r={a,debt,minimum:+d.minimum||0,limit:+d.limit||0,util:d.limit?debt/d.limit:null,ok:!!(d.cutDay&&d.dueDay)};
-  if(!r.ok)return r;
-  const cut=onOrBefore(d.cutDay,today),due=after(d.dueDay,cut);
-  r.cut=cut;r.due=due;r.stmt=Math.max(0,-balAt(a.id,cut,exclude));
-  if(today<=due){r.paid=inflow(a.id,cut,today,exclude);r.pending=Math.max(0,r.stmt-r.paid);
-    r.state=r.stmt<0.01?'nada':r.pending<0.01?'pagado':'pendiente';r.days=daysBetween(today,due);
-    r.nextDue=due;r.nextAmt=r.pending;}
-  else{r.paid=inflow(a.id,cut,due,exclude);r.pending=Math.max(0,r.stmt-r.paid);
-    r.state=r.stmt<0.01?'nada':r.pending<0.01?'pagado':'vencido';
-    const nc=shiftDay(d.cutDay,cut,1);r.nextCut=nc;r.nextDue=after(d.dueDay,nc);r.days=daysBetween(today,r.nextDue);r.nextAmt=null;}
-  // historial: ciclos cerrados
-  r.hist=[];let c=today<=due?shiftDay(d.cutDay,cut,-1):cut;
-  for(let k=0;k<6;k++){const dd=after(d.dueDay,c);const st=Math.max(0,-balAt(a.id,c,exclude));
-    if(st>0.01){const p=inflow(a.id,c,dd,exclude);r.hist.unshift({cut:c,due:dd,stmt:st,paid:p,res:p>=st-0.01?'total':p>0?'parcial':'nada'});}
-    c=shiftDay(d.cutDay,c,-1);}
-  return r;
-}
 /* estado de un préstamo / deuda */
 function loanInfo(a,today=todayStr(),exclude){
   const d=a.debt||{};const debt=Math.max(0,-(balances(exclude)[a.id]||0));
@@ -1908,75 +1845,6 @@ function debtAlerts(){
 }
 
 const STATE_LBL={pagado:['Pagado','ok'],pendiente:['Pendiente','warn'],vencido:['Revisar','bad'],nada:['Sin deuda','ok']};
-function vDeudas(){
-  const cards=liabs().filter(isCard),loans=liabs().filter(a=>!isCard(a));
-  const ci=cards.map(a=>cardInfo(a)),li=loans.map(a=>loanInfo(a));
-  const totDebt=[...ci,...li].reduce((s,r)=>s+toPEN(r.debt,r.a.currency),0);
-  const lim=ci.reduce((s,r)=>s+(r.limit||0),0),cdebt=ci.filter(r=>r.limit).reduce((s,r)=>s+r.debt,0);
-  const tu=lim?cdebt/lim:null;
-  const cf=cashflow(60);const sal=S.settings.salary||{};
-  const utilCls=u=>u==null?'':u<0.3?'ok':u<0.5?'warn':'bad';
-  const chip=s=>{const [l,c]=STATE_LBL[s]||['—',''];return `<span class="st ${c}">${l}</span>`;};
-  const when=(r)=>r.days===0?'hoy':r.days===1?'mañana':`en ${r.days} días`;
-  const head=(r,big)=>`<div class="dhead"><b>${esc(r.a.name)}</b>${r.ok?chip(r.state):'<span class="st warn">Faltan datos</span>'}</div><div class="dbig">${big}</div>`;
-  const cardHtml=r=>{const a=r.a;
-    if(!r.ok)return `<div class="dcard">${head(r,`Debes <b class="num">${money(r.debt,a.currency)}</b>`)}
-      <p class="dmsg">Completa la línea y las fechas de corte y pago para avisarte cuándo pagar.</p>
-      <div class="dact"><button class="btn primary" data-act="cfgDebt" data-id="${a.id}">Completar datos</button></div></div>`;
-    const big=r.state==='pendiente'?`Paga <b class="num neg">${money(r.pending,a.currency)}</b> antes del ${esc(fmtD(r.due))} <span class="muted">(${when(r)})</span>`
-      :r.state==='vencido'?`Faltaron <b class="num neg">${money(r.pending,a.currency)}</b> del pago del ${esc(fmtD(r.due))}`
-      :r.state==='pagado'?`${ic('check')} Pago de este mes listo. Próximo: ${esc(fmtD(r.nextDue))}`
-      :`No debes nada en esta tarjeta`;
-    return `<div class="dcard">${head(r,big)}
-      ${r.state==='vencido'?'<p class="dmsg bad">Si pagaste al menos el mínimo a tiempo, registra ese pago para que la app lo sepa.</p>':''}
-      <div class="drow"><span>Deuda total</span><b class="num">${money(r.debt,a.currency)}</b></div>
-      ${r.limit?`<div class="drow"><span>Usas ${Math.round(r.util*100)}% de tu línea</span><span class="num muted">${money(r.limit,a.currency)}</span></div><div class="track"><div class="fill u-${utilCls(r.util)}" style="width:${Math.min(100,r.util*100).toFixed(1)}%"></div></div>`:''}
-      <details class="dmore"><summary>Ver detalle</summary>
-        <div class="drow"><span>Último corte (${esc(fmtD(r.cut))})</span><span class="num">${money(r.stmt,a.currency)}</span></div>
-        <div class="drow"><span>Pagado desde el corte</span><span class="num">${money(r.paid,a.currency)}</span></div>
-        ${r.hist.length?`<div class="hist">${r.hist.map(h=>`<span class="h ${h.res}" title="Corte ${esc(fmtD(h.cut))}">${h.res==='total'?'✓':h.res==='parcial'?'½':'✕'}</span>`).join('')}</div><p class="tiny muted" style="margin:4px 0 0">Meses anteriores: ✓ pagaste todo a tiempo · ½ pagaste una parte · ✕ no registraste pago</p>`:''}
-      </details>
-      <div class="dact"><button class="btn ${r.state==='pendiente'||r.state==='vencido'?'primary':''}" data-act="payDebt" data-id="${a.id}" data-amt="${r.state==='pendiente'||r.state==='vencido'?r2(r.pending):''}">Registrar pago</button><button class="btn" data-act="cfgDebt" data-id="${a.id}">Editar</button></div></div>`;};
-  const loanHtml=r=>{const a=r.a;
-    if(!r.ok)return `<div class="dcard">${head(r,`Debes <b class="num">${money(r.debt,a.currency)}</b>`)}
-      <p class="dmsg">${r.debt<0.01?'Sin saldo pendiente.':'Pon la cuota y el día de pago para avisarte.'}</p>
-      <div class="dact"><button class="btn ${r.debt<0.01?'':'primary'}" data-act="cfgDebt" data-id="${a.id}">${r.debt<0.01?'Editar':'Completar datos'}</button></div></div>`;
-    const big=r.state==='pagado'?`${ic('check')} Cuota de este mes pagada. Próxima: ${esc(fmtD(shiftDay(a.debt.dueDay,r.nextDue,1)))}`
-      :r.state==='vencido'?`No registraste la cuota del ${esc(fmtD(r.prevDue))}`
-      :r.state==='nada'?'Préstamo pagado por completo'
-      :`Paga <b class="num neg">${money(r.pending,a.currency)}</b> antes del ${esc(fmtD(r.nextDue))} <span class="muted">(${when(r)})</span>`;
-    return `<div class="dcard">${head(r,big)}
-      <div class="drow"><span>Te falta pagar</span><b class="num">${money(r.debt,a.currency)}</b></div>
-      <div class="drow"><span>Cuota mensual</span><span class="num">${money(r.cuota,a.currency)}</span></div>
-      ${r.endDate?`<div class="drow"><span>Terminas de pagar</span><span>${esc(fmtD(r.endDate,{month:'long',year:'numeric'}))}</span></div>`:''}
-      <div class="dact"><button class="btn ${r.state==='pagado'||r.state==='nada'?'':'primary'}" data-act="payDebt" data-id="${a.id}" data-amt="${r.state==='pagado'||r.state==='nada'?'':r2(r.pending)}">Registrar pago</button><button class="btn" data-act="cfgDebt" data-id="${a.id}">Editar</button></div></div>`;};
-  return `<div class="pagehead"><h1 class="page">Deudas</h1><button class="btn sm" data-act="addDebt">${ic('plus')}Agregar</button></div>
-  <p class="lede">Tus tarjetas y préstamos: cuánto debes y cuándo pagar. Pagar siempre a tiempo es lo que más cuida tu historial crediticio.</p>
-  <div class="statgrid">
-    <div class="stat"><span>Debes en tarjetas y préstamos</span><b class="num neg">${money(totDebt)}</b><em>Solo cuentas activas. No incluye las deudas de Personas.</em></div>
-    <div class="stat"><span>Uso de tus tarjetas</span><b class="num ${utilCls(tu)}">${tu==null?'—':Math.round(tu*100)+'%'}</b><em>${tu==null?'Agrega la línea de crédito':'Lo ideal: menos de 30%'}</em></div>
-  </div>
-  <h2 class="sect">Tarjetas de crédito</h2>
-  <div class="dgrid">${ci.map(cardHtml).join('')||`<button class="emptyadd" data-act="addKind" data-k="tarjeta">${ic('plus')}Agregar una tarjeta de crédito</button>`}</div>
-  <h2 class="sect">Préstamos y deudas</h2>
-  <div class="dgrid">${li.map(loanHtml).join('')||`<button class="emptyadd" data-act="addKind" data-k="prestamo">${ic('plus')}Agregar un préstamo</button>`}</div>
-  <h2 class="sect">¿Te alcanza el dinero?</h2>
-  <p class="lede">Lo que tienes en bancos y efectivo, más tu sueldo, menos lo que vas a pagar en los próximos 60 días.</p>
-  <div class="card">
-    ${!cf.ev.length?`<div class="empty small"><b>Aún no hay pagos ni ingresos programados</b>Completa los datos de tus tarjetas y préstamos, y tu sueldo.</div>`:
-    `<div class="cfhead"><span>Tienes hoy</span><b class="num">${money(cf.start)}</b></div>
-    <div class="cflist">${cf.ev.map(e=>`<div class="cfrow ${e.run<0?'neg-bg':''}"><span class="cfd">${esc(fmtD(e.date))}</span><span class="cfn">${esc(e.name.replace(/^Pagar\s+/,'Pagar '))}</span><span class="num ${e.amt<0?'neg':'pos'}">${e.amt<0?'−':'+'}${money(Math.abs(e.amt))}</span><span class="num cfr ${e.run<0?'neg':''}">Quedan ${money(e.run)}</span></div>`).join('')}</div>
-    <div class="cfsum ${cf.min<0?'bad':'ok'}">${cf.min<0?`El ${esc(fmtD(cf.minDate,{day:'numeric',month:'long'}))} te faltarían <b>${money(-cf.min)}</b>. Planifícalo desde ahora.`:`Te alcanza. Lo mínimo que tendrás será ${money(cf.min)} el ${esc(fmtD(cf.minDate))}.`}</div>`}
-  </div>
-  <div class="card settings" style="margin-top:14px">
-    <h3 style="margin-bottom:2px">Tu sueldo y pagos fijos</h3>
-    <div class="row"><div class="txt"><b>Sueldo mensual</b><span>Lo que recibes y qué día.</span></div>
-      <div class="inrow"><input class="input num" id="salAmt" type="number" inputmode="decimal" step="0.01" min="0" placeholder="S/ monto" value="${esc(sal.amount||'')}"><input class="input" id="salDay" type="number" inputmode="numeric" min="1" max="31" placeholder="Día" value="${esc(sal.day||'')}"></div></div>
-    ${(S.fixed||[]).map(f=>`<div class="row"><div class="txt"><b>${esc(f.name)}</b><span>Día ${f.day} de cada mes</span></div><span class="num">${money(f.amount)}</span><button class="iconbtn" data-act="delFixed" data-id="${f.id}" aria-label="Quitar ${esc(f.name)}">${ic('x')}</button></div>`).join('')}
-    <div class="row"><div class="txt"><span>Pensión, colegio, alquiler, servicios, suscripciones…</span></div><button class="btn sm" data-act="addFixed">${ic('plus')}Pago fijo</button></div>
-  </div>
-  <button class="btn block" style="margin-top:14px" data-act="ics">${ic('cal')}Poner recordatorios en mi calendario</button>`;
-}
 function debtForm(a){accountForm(null,a);}
 function loanForm(){accountForm('prestamo');}
 
@@ -2011,11 +1879,61 @@ document.addEventListener('change',e=>{
     setTimeout(()=>{const f=document.activeElement?.id;render();if(f==='salAmt'||f==='salDay')$('#'+f)?.focus();},0);}
 });
 
+const APP_START='2026-11-18';
+// Feriados nacionales (DL 713 y modificatorias); excluye días compensables.
+// Fuente: https://www.gob.pe/feriados y El Peruano, consulta 19-nov-2026.
+const PE_HOLIDAYS=new Set([2026,2027].flatMap(y=>['01-01','05-01','06-07','06-29','07-23','07-28','07-29','08-06','08-30','10-08','11-01','12-08','12-09','12-25'].map(d=>y+'-'+d)).concat(['2026-04-02','2026-04-03','2027-03-25','2027-03-26']));
+function businessDay(date,rule='mismo'){if(rule==='mismo')return date;let d=date;for(let i=0;i<15;i++){const week=new Date(d+'T12:00').getDay();if(week!==0&&week!==6&&!PE_HOLIDAYS.has(d))return d;d=addDays(d,rule==='anterior'?-1:1);}return d;}
+function cardDayRule(a){return a.debt?.businessDay||(/BCP.*2292/i.test(a.name)&&+a.debt?.cutDay===25?'anterior':'mismo');}
+function cardCycle(a,mk){const d=a.debt||{},rule=cardDayRule(a),dueMonth=+d.dueDay>+d.cutDay?mk:shiftMonth(mk,1);return {cut:businessDay(mkDate(+mk.slice(0,4),+mk.slice(5),+d.cutDay),rule),due:businessDay(mkDate(+dueMonth.slice(0,4),+dueMonth.slice(5),+d.dueDay),rule)};}
+function cardMinimum(a,cut,stmt){const d=a.debt||{},explicit=d.minimumByCut?.[cut],legacyCut=d.cutDay&&d.dueDay?cardCycle(a,monthKey(APP_START)).cut:null;
+ const legacy=legacyCut&&legacyCut>APP_START?cardCycle(a,shiftMonth(monthKey(APP_START),-1)).cut:legacyCut;
+ const amount=Number.isFinite(explicit)?explicit:cut===legacy&&Number.isFinite(d.minimum)&&d.minimum>0?d.minimum:r2(stmt*(Number.isFinite(d.minimumRatio)?d.minimumRatio:.05));
+ return {amount:r2(Math.min(stmt,Math.max(0,amount))),estimated:!Number.isFinite(explicit)&&!(cut===legacy&&d.minimum>0)};}
+function cardInfo(a,today=todayStr(),exclude){const d=a.debt||{},debt=Math.max(0,-(balances(exclude)[a.id]||0)),limit=+d.limit||0;
+ const r={a,debt,limit,available:r2(limit-debt),util:limit?debt/limit:null,minimum:0,ok:!!(d.cutDay&&d.dueDay),hist:[]};if(!r.ok)return r;
+ let mk=monthKey(today);while(cardCycle(a,mk).cut>today)mk=shiftMonth(mk,-1);
+ Object.assign(r,cardCycle(a,mk));r.stmt=r2(Math.max(0,-balAt(a.id,r.cut,exclude)));r.paid=r2(inflow(a.id,r.cut,today,exclude));r.pending=r2(Math.max(0,r.stmt-r.paid));
+ const minimum=cardMinimum(a,r.cut,r.stmt);r.minimum=minimum.amount;r.minimumEstimated=minimum.estimated;r.minimumPending=r2(Math.max(0,r.minimum-r.paid));
+ r.state=r.stmt<.01?'nada':r.pending<.01?'pagado':today>r.due?'vencido':'pendiente';r.days=daysBetween(today,r.due);r.nextDue=r.due;r.nextAmt=r.pending;
+ if(today>r.due||r.pending<.01){const next=cardCycle(a,shiftMonth(mk,1));r.nextCut=next.cut;if(r.pending<.01)r.nextDue=next.due;}
+ for(let k=6;k>=0;k--){const c=cardCycle(a,shiftMonth(mk,-k));if(c.cut<APP_START||c.due>=today)continue;const stmt=Math.max(0,-balAt(a.id,c.cut,exclude)),paid=inflow(a.id,c.cut,c.due,exclude);if(stmt>.005)r.hist.push({...c,stmt,paid,res:paid>=stmt-.01?'total':paid>0?'parcial':'nada'});}
+ return r;
+}
+function moneySummary(){const n=netWorth();return summaryStrip([['Tienes',money(n.act)],['Debes',money(n.pas),n.pas>.005?'neg':'muted'],['Neto',money(n.act-n.pas)]])+(n.retained?`<p class="muted small">Ahorro retenido ${money(n.retained)}</p>`:'');}
+function accountGroup(a){if(a.type==='efectivo')return 'Efectivo';if(a.type==='banco')return /BCP/i.test(a.name)?'Banco BCP':/IBK|Interbank/i.test(a.name)?'Banco Interbank':'Otros bancos';if(['ahorro','inversion'].includes(a.type))return 'Ahorros';if(a.type==='tarjeta')return 'Tarjetas';if(a.type==='porpagar')return 'Préstamos';return 'Te deben';}
+function orderedAccounts(){return [...S.accounts].sort((a,b)=>(a.order??S.accounts.indexOf(a))-(b.order??S.accounts.indexOf(b)));}
+function vCuentas(){const {b}=netWorth(),groups=['Efectivo','Banco BCP','Banco Interbank','Otros bancos','Ahorros','Tarjetas','Préstamos','Te deben'];
+ return backHead('Cuentas')+`<button class="iconbtn" style="float:right" data-act="accountsMenu" aria-label="Opciones de cuentas">⋮</button>`+moneySummary()+groups.map(g=>{const list=orderedAccounts().filter(a=>!a.archived&&accountGroup(a)===g).sort((a,b)=>+!!a.noDisponible-+!!b.noDisponible);if(!list.length)return '';const total=list.reduce((s,a)=>s+toPEN(b[a.id]||0,a.currency),0);
+ return `<div class="grouphdr"><span>${g}</span><span class="num">${money(Math.abs(total))}</span></div><div class="card list">${list.map(a=>{const r=a.type==='tarjeta'?cardInfo(a):null;return `<div class="account-entry" data-act="accountDetail" data-id="${esc(a.id)}"><b>${esc(a.name)}</b>${a.noDisponible?' <span class="pill">no disponible</span>':''}${r?`<div class="card-columns"><span>Debes<b class="num ${r.debt?'neg':'muted'}">${currencyAmount(r.debt,a.currency)}</b></span><span>Disponible<b class="num ${r.available<0?'neg':''}">${r.limit?currencyAmount(r.available,a.currency):'Sin línea indicada'}</b></span></div>${r.limit&&r.available<0?`<p class="neg small">Te pasaste ${currencyAmount(-r.available,a.currency)} de tu línea</p>`:''}`:`<div class="num">${currencyAmount(LIAB.has(a.type)?Math.abs(b[a.id]||0):b[a.id]||0,a.currency)}</div>`}</div>`;}).join('')}</div>`;}).join('');}
+function accountsMenu(mode){const list=orderedAccounts();if(!mode){openModal('<h2>Cuentas</h2><div class="menu"><button data-act="newAcc">Añadir</button><button data-act="accountsMenu" data-mode="visibility">Mostrar/Ocultar</button><button data-act="accountsMenu" data-mode="order">Ordenar</button></div>');return;}
+ openModal(`<h2>${mode==='order'?'Ordenar':'Mostrar/Ocultar'}</h2><div class="card list">${list.map((a,i)=>`<div class="acct"><span class="nm">${esc(a.name)}</span>${mode==='order'?`<button class="btn" data-order="${a.id}" data-direction="-1" ${!i?'disabled':''}>↑</button><button class="btn" data-order="${a.id}" data-direction="1" ${i===list.length-1?'disabled':''}>↓</button>`:`<label><input type="checkbox" data-visible="${a.id}" ${!a.archived?'checked':''}> Visible</label>`}</div>`).join('')}</div>`,m=>{m.onchange=e=>{const id=e.target.dataset.visible;if(id){acc(id).archived=!e.target.checked;save();render();}};m.onclick=e=>{const b=e.target.closest('[data-order]');if(!b)return;const i=list.findIndex(a=>a.id===b.dataset.order),j=i+Number(b.dataset.direction);if(!list[j])return;[list[i],list[j]]=[list[j],list[i]];list.forEach((a,n)=>a.order=n);save();accountsMenu(mode);render();};});}
+function accountDetail(id){const a=acc(id);if(!a)return;if(a.type==='tarjeta')return debtDetail(id);if(a.educacional&&typeof educationDetail==='function')return educationDetail(id);
+ openModal(`<h2>${esc(a.name)}</h2><p class="detail-amount">${currencyAmount(balances()[id]||0,a.currency)}</p>${a.noDisponible?'<p class="muted">Ahorro retenido · no disponible</p>':''}<div class="actions"><button class="btn" data-act="reconcile" data-id="${id}">Cuadrar</button><button class="btn" data-act="editAcc" data-id="${id}">Editar</button></div><h3>Movimientos</h3>${S.tx.filter(t=>touchesAccount(t,id)&&txKind(t)!=='comprobante').map(txRow).join('')||'<p class="muted">Sin movimientos.</p>'}`);}
+function debtBlock(a){const r=infoOf(a),card=isCard(a),minimum=card&&r.ok?`Mínimo ${currencyAmount(r.minimum,a.currency)}${r.minimumEstimated?' (estimado)':''} · `:'';
+ return `<section class="dcard" data-act="debtDetail" data-id="${a.id}"><div class="dhead"><b>${esc(a.name)}</b><span class="st ${r.state==='vencido'?'bad':''}">${r.ok?(r.state==='vencido'?'Vencido':STATE_LBL[r.state]?.[0]||'Pendiente'):'Faltan fechas'}</span></div><div class="dbig">${r.ok?`${r.pending>.005?'Paga':'Pagado'} <b class="num ${r.pending>.005?'neg':''}">${currencyAmount(r.pending||0,a.currency)}</b> ${r.pending>.005?'antes del '+esc(fmtD(card?r.due:r.nextDue)):''}`:`Debes <b class="num neg">${currencyAmount(r.debt,a.currency)}</b>`}</div><p class="small muted">${minimum}Deuda total ${currencyAmount(r.debt,a.currency)}${!card&&a.debt?.cuotasRest?' · '+a.debt.cuotasRest+' cuotas pendientes':''}</p><button class="btn" data-act="payDebt" data-id="${a.id}" data-amt="${r.pending||''}">Registrar pago</button></section>`;
+}
+function vDeudas(){const n=netWorth(),people=(S.people||[]).filter(p=>personRelations(p.id).some(r=>r.payable&&r.remaining>.005));return '<div class="pagehead"><h1 class="page">Deudas</h1><button class="btn" data-act="addDebt">Agregar</button></div>'+summaryStrip([['Deudas pendientes',money(n.pas),n.pas?'neg':'muted'],['Tarjetas',String(liabs().filter(isCard).length)],['Personas',String(people.length)]])+`<div class="dgrid" style="margin-top:16px">${liabs().map(debtBlock).join('')}${people.map(p=>{const v=personRelations(p.id).reduce((s,r)=>s+(r.payable?Math.max(0,toPEN(r.remaining,r.currency)):0),0);return `<section class="dcard" data-act="personDetail" data-id="${p.id}"><b>${esc(p.name)}</b><p>Debes <b class="neg num">${money(v)}</b></p></section>`;}).join('')}</div>`;}
+function debtDetail(id){const a=acc(id);if(!a)return;const r=infoOf(a),card=isCard(a),d=a.debt||{},row=(l,v)=>`<div class="drow"><span>${l}</span><b>${v}</b></div>`;
+ openModal(`<h2>${esc(a.name)}</h2>${r.ok?`<section class="card"><h3>Este mes</h3>${row(card?'Total del mes':'Cuota',currencyAmount(card?r.stmt:r.cuota,a.currency))}${card?row('Pago mínimo',currencyAmount(r.minimum,a.currency)+(r.minimumEstimated?' (estimado)':'')+' <button class="linkbtn" data-act="editMinimum" data-id="'+id+'">Editar</button>'):''}${row('Fecha de pago',esc(fmtD(card?r.due:r.nextDue,{day:'numeric',month:'long',year:'numeric'})))}${row('Pagado desde '+(card?'el corte':'el pago anterior'),currencyAmount(r.paid||0,a.currency))}${row('Falta pagar',`<span class="neg">${currencyAmount(r.pending,a.currency)}</span>`)}</section>`:'<p class="muted">Completa las fechas para calcular el pago del mes.</p>'}<section class="card" style="margin-top:14px"><h3>Deuda y línea</h3>${row('Deuda total',currencyAmount(r.debt,a.currency))}${card?row('Línea',r.limit?currencyAmount(r.limit,a.currency):'Sin indicar')+row('Disponible',r.limit?`<span class="${r.available<0?'neg':''}">${currencyAmount(r.available,a.currency)}</span>`:'Sin indicar')+(r.limit?progressBar(r.debt,r.limit,r.available<0?'':'u-ok'):'')+(r.available<0?`<p class="neg">Te pasaste ${currencyAmount(-r.available,a.currency)} de tu línea</p>`:''):''}</section>${card&&r.ok?`<section class="card" style="margin-top:14px"><h3>Fechas</h3>${row('Corte',fmtD(r.cut))}${row('Pago',fmtD(r.due))}<p class="hint">${{anterior:'Día hábil anterior',siguiente:'Día hábil siguiente',mismo:'El mismo día'}[cardDayRule(a)]}</p></section><section class="card" style="margin-top:14px"><h3>Meses anteriores</h3>${r.hist.length?r.hist.map(h=>`<p>${h.res==='total'?'✓':h.res==='parcial'?'½':'✕'} ${esc(fmtD(h.cut,{month:'long',year:'numeric'}))}</p>`).join(''):'<p class="muted">Se muestran ciclos desde el 18 de noviembre de 2026.</p>'}</section>`:''}<div class="actions"><button class="btn primary" data-act="payDebt" data-id="${id}" data-amt="${r.pending||''}">Registrar pago</button><button class="btn" data-act="reconcile" data-id="${id}">Cuadrar</button><button class="btn" data-act="editAcc" data-id="${id}">Editar ${card?'tarjeta':'préstamo'}</button></div><h3>Movimientos ${card?'de este ciclo':''}</h3>${S.tx.filter(t=>touchesAccount(t,id)&&(!r.cut||t.date.slice(0,10)>=r.cut)&&txKind(t)!=='comprobante').map(txRow).join('')||'<p class="muted">Sin movimientos.</p>'}`);
+}
+async function editMinimum(id){const a=acc(id);if(!a)return;const r=cardInfo(a),cut=r.cut;const raw=await ask({title:'Pago mínimo de este corte',input:{label:'Monto según tu estado de cuenta',type:'number',value:String(r.minimum)},ok:'Guardar'});if(raw===null)return debtDetail(id);const value=Number(raw);if(!Number.isFinite(value)||value<0||value>r.stmt){toast('Escribe un mínimo entre cero y el total facturado.');return debtDetail(id);}const current=cardInfo(acc(id));if(current.cut!==cut||current.stmt!==r.stmt){toast('El corte cambió. Revisa de nuevo.');return debtDetail(id);}a.debt??={};a.debt.minimumByCut={...a.debt.minimumByCut,[cut]:r2(value)};a.debt.minimumRatio=r.stmt>0?value/r.stmt:(a.debt.minimumRatio??.05);save();debtDetail(id);}
+function blockCard(title,value,small,act,tab){return `<section class="card home-block" data-act="${act||'goto'}" ${tab?`data-tab="${tab}"`:''}><span class="muted small">${title}</span><b class="block-value">${value}</b>${small?`<span class="small muted">${small}</span>`:''}</section>`;}
+function upcomingPayments(days=7,today=todayStr()){return liabs().map(a=>{const r=infoOf(a);return r.ok&&r.pending>.005?{id:a.id,date:isCard(a)?r.due:r.nextDue,name:a.name,amount:toPEN(r.pending,a.currency),nativeAmount:r.pending,currency:a.currency,act:'payDebt',kind:'debt'}:null;}).filter(e=>e&&e.date<=addDays(today,days)).sort((a,b)=>a.date.localeCompare(b.date));}
+function upcomingRow(e){return `<div class="payrow" data-act="${e.act||'goto'}" ${e.id?`data-id="${e.id}"`:''}${e.tab?` data-tab="${e.tab}"`:''}><div class="pdate"><b>${+e.date.slice(8)}</b><span>${esc(fmtD(e.date,{month:'short'}))}</span></div><div class="pname"><b>${esc(e.name)}</b><span>${esc(e.advice||fmtD(e.date))}</span></div><b class="num ${e.income?'pos':'neg'}">${currencyAmount(e.nativeAmount??e.amount,e.currency||'PEN')}</b></div>`;}
+function vResumen(){const n=netWorth(),p=peopleTotals(),tot=monthTotals(ui.month),b=budgetRows(ui.month),budget=b.reduce((s,r)=>s+r.lim,0),up=upcomingPayments(7),next=up[0],expected=typeof budgetExpected==='function'?budgetExpected(ui.month,'ingreso'):0,pending=typeof pendingFixed==='function'?pendingFixed():[];
+ return vInstall()+`<section class="home-summary" data-act="goto" data-tab="cuentas">${moneySummary()}</section>`+blockCard('Deudas pendientes',`<span class="${n.pas?'neg':'muted'}">${money(n.pas)}</span>`,next?`Lo próximo: ${money(next.amount)} el ${esc(fmtD(next.date))}`:'Sin pagos próximos indicados','goto','deudas')+(p.receivable>.005?blockCard('Te deben',money(p.receivable),'','goto','personas'):'')+(up.length?`<section class="card home-block" data-act="goto" data-tab="fijos"><h3>Próximos pagos (7 días)</h3>${up.slice(0,3).map(upcomingRow).join('')}</section>`:'')+(pending.length?blockCard('Por confirmar',`${pending.length} por confirmar`,'','goto','confirmar'):'')+`<section class="card home-block" data-act="goto" data-tab="budget"><h3>Este mes</h3><p>Recibiste <b class="pos num">${money(tot.ing)}</b> de ${money(expected)} esperados</p>${progressBar(tot.ing,expected,'in')}<p>Gastaste <b class="neg num">${money(tot.gas)}</b> de ${money(budget)} presupuestados</p>${progressBar(tot.gas,budget)}</section><section class="card home-block"><div class="cardhead"><h3>Últimos movimientos</h3><button class="linkbtn" data-act="goto" data-tab="movs">Ver todos</button></div>${S.tx.filter(t=>txKind(t)!=='comprobante').slice(0,5).map(txRow).join('')||'<p class="muted">Toca + para registrar.</p>'}</section>`;
+}
+
 /* ---------- acciones (delegación) ---------- */
 document.addEventListener('click',e=>{const el=e.target.closest('[data-act]');if(el){if(el.tagName==='A'&&el.getAttribute('href'))return;doAct(el.dataset);}});
 document.addEventListener('act',e=>doAct(e.detail));
 async function doAct(d){
   switch(d.act){
+    case 'accountsMenu':accountsMenu(d.mode);break;
+    case 'accountDetail':accountDetail(d.id);break;
+    case 'debtDetail':debtDetail(d.id);break;
+    case 'editMinimum':await editMinimum(d.id);break;
     case 'addDebt':addWizard(['tarjeta','prestamo']);break;
     case 'addKind':accountForm(d.k);break;
     case 'catType':ui.catType=d.t;render();break;
