@@ -2287,12 +2287,15 @@ function initialBalancesPreview(plan){
     ${plan.rows.length?`<table style="width:100%;table-layout:fixed;border-collapse:collapse;font-size:13px"><thead><tr><th scope="col" style="text-align:left">Cuenta</th><th scope="col" style="text-align:left">Ahora</th><th scope="col" style="text-align:left">Quedará</th></tr></thead><tbody>${plan.rows.map(r=>`<tr>${[`${esc(r.name)}<div class="tiny muted">${r.currency==='USD'?'US$':'S/'}</div>`,cell(r,false),cell(r,true)].map(c=>`<td style="padding:12px 3px;border-top:1px solid var(--line);overflow-wrap:anywhere;vertical-align:top">${c}</td>`).join('')}</tr>`).join('')}</tbody></table>`:''}
     <div class="statgrid" style="margin-top:16px"><div class="stat"><span>Tienes</span><b class="num">${money(plan.act)}</b></div><div class="stat"><span>Debes</span><b class="num ${plan.pas>0?'neg':'muted'}">${money(plan.pas)}</b></div></div><p class="hint">Totales de todas tus cuentas y Personas, en soles con tu tipo de cambio actual. ${plan.rows.some(r=>r.openingTx)?'La deuda en dólares se guarda como un único saldo inicial por tarjeta, sin gasto ni presupuesto.':'No se crean movimientos.'}</p>`;
 }
+// Lo que el usuario aprueba: qué se cambia en cada cuenta y qué registros se agregan. Los totales son informativos.
+function planPrint(plan){const r=v=>Math.round((+v||0)*100)/100;return JSON.stringify({rows:(plan.rows||[]).map(x=>[x.id,r(x.after),JSON.stringify(x.patch)]),acc:(plan.newAccounts||[]).map(a=>a.id),f:(plan.fijos||[]).map(x=>[x.id,x.name,r(x.template?.amount),x.dia]),c:(plan.receipts||[]).map(x=>[x.id,r(x.amount)]),p:(plan.personTx||[]).map(x=>[x.id,r(x.amount)])});}
+function dataFilePlanSafe(raw,plan){return plan||dataFilePlan(raw);}
 function loadBalancesForm(preset){
   openModal(`<h2>Cargar datos desde archivo</h2><p>Elige tu archivo privado y revisa cómo quedarán tus cuentas. Antes de aplicar se descarga un respaldo cifrado.</p>
     <div class="field"><label for="balancesFile">Archivo de datos (.json)</label><input class="input" type="file" id="balancesFile" accept=".json,application/json"></div>
     <div id="balancesPreview"></div><div class="err" id="balancesErr" role="alert"></div><div class="actions"><button class="btn" id="balancesCancel">Cancelar</button><button class="btn primary" id="balancesApply" disabled>Aplicar</button></div>`,m=>{
     const q=s=>m.querySelector(s);let raw=null,previewState=null,busy=false,selection=0;
-    const preview=()=>{const plan=dataFilePlan(raw);q('#balancesPreview').innerHTML=dataFilePreview(plan);previewState=canon(S);return plan;};
+    let seenPlan=null;const preview=()=>{const plan=dataFilePlan(raw);q('#balancesPreview').innerHTML=dataFilePreview(plan);previewState=canon(S);seenPlan=plan;return plan;};
     q('#balancesCancel').onclick=closeModal;
     if(preset){try{raw=preset;preview();q('#balancesApply').disabled=false;q('#balancesFile').closest('.field').innerHTML='<p class="hint">Datos recibidos desde un enlace. Revisa la tabla y toca Aplicar.</p>';}catch(e){raw=null;q('#balancesErr').textContent=e.message;}}
     if(q('#balancesFile'))q('#balancesFile').onchange=async()=>{const ticket=++selection,file=q('#balancesFile').files[0];raw=null;q('#balancesApply').disabled=true;q('#balancesErr').textContent='';q('#balancesPreview').innerHTML='';
@@ -2304,7 +2307,7 @@ function loadBalancesForm(preset){
       busy=true;for(const id of ['balancesApply','balancesCancel','balancesFile']){const el=q('#'+id);if(el)el.disabled=true;}$('#app').inert=true;q('#balancesErr').textContent='';let committed=false;
       try{await syncBeforeDataChange();if(!m.isConnected||!S||!KEY)throw new Error('Vuelve a abrir la app antes de continuar.');
         // Si llegaron cambios pero la tabla que viste no cambia, se puede aplicar igual (evita un bucle con otra pestaña o el celular abiertos).
-        if(canon(S)!==previewState){const seen=q('#balancesPreview').innerHTML;preview();if(q('#balancesPreview').innerHTML!==seen)throw new Error('Llegaron cambios de tus equipos que cambian la tabla. Revísala y vuelve a tocar Aplicar.');}
+        if(canon(S)!==previewState){const seen=planPrint(dataFilePlanSafe(raw,seenPlan));preview();const now=planPrint(dataFilePlan(raw));if(now!==seen){console.warn('[carga] la tabla cambió',seen,now);throw new Error('Llegaron cambios de tus equipos que cambian la tabla. Revísala y vuelve a tocar Aplicar.');}}
         const plan=dataFilePlan(raw),original=S;await doBackup();clearTimeout(saveTimer);
         if(S!==original||!KEY||!m.isConnected)throw new Error('La app se bloqueó o cerraste la confirmación. Vuelve a abrirla antes de continuar.');
         const next=structuredClone(S);applyExtraFileData(next,plan);next.settings.u=Math.max(Date.now(),(next.settings.u||0)+1);
