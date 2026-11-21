@@ -2303,7 +2303,8 @@ function loadBalancesForm(preset){
       if(IS_NATIVE){q('#balancesErr').textContent='Hazlo desde Edge en tu PC para descargar el respaldo. Después sincroniza el celular.';return;}
       busy=true;for(const id of ['balancesApply','balancesCancel','balancesFile']){const el=q('#'+id);if(el)el.disabled=true;}$('#app').inert=true;q('#balancesErr').textContent='';let committed=false;
       try{await syncBeforeDataChange();if(!m.isConnected||!S||!KEY)throw new Error('Vuelve a abrir la app antes de continuar.');
-        if(canon(S)!==previewState){preview();throw new Error('Llegaron cambios de tus equipos. Revisa la tabla actualizada y vuelve a tocar Aplicar.');}
+        // Si llegaron cambios pero la tabla que viste no cambia, se puede aplicar igual (evita un bucle con otra pestaña o el celular abiertos).
+        if(canon(S)!==previewState){const seen=q('#balancesPreview').innerHTML;preview();if(q('#balancesPreview').innerHTML!==seen)throw new Error('Llegaron cambios de tus equipos que cambian la tabla. Revísala y vuelve a tocar Aplicar.');}
         const plan=dataFilePlan(raw),original=S;await doBackup();clearTimeout(saveTimer);
         if(S!==original||!KEY||!m.isConnected)throw new Error('La app se bloqueó o cerraste la confirmación. Vuelve a abrirla antes de continuar.');
         const next=structuredClone(S);applyExtraFileData(next,plan);next.settings.u=Math.max(Date.now(),(next.settings.u||0)+1);
