@@ -870,7 +870,10 @@ async function showPhoneQr(){
     <p class="hint">El código lleva tu acceso a GitHub cifrado con tu contraseña y vence en 30 minutos. Aun así, no lo compartas.</p>
     <div class="actions"><button class="btn primary" id="qrOk">Listo</button></div>`,m=>m.querySelector('#qrOk').onclick=closeModal);
 }
-function readLinkFromHash(){
+let PENDING_LOAD=null;
+function readLoadFromHash(){if(!location.hash.startsWith('#cargar-'))return;try{const bytes=unb64u(location.hash.slice(8));if(bytes.length>200000)throw 0;PENDING_LOAD=JSON.parse(dec.decode(bytes));}catch(_){PENDING_LOAD=null;setTimeout(()=>toast('El enlace de carga no es válido.',4000),500);}history.replaceState(null,'',location.pathname+location.search);}
+window.addEventListener('hashchange',()=>{if(!location.hash.startsWith('#cargar-'))return;readLoadFromHash();if(S&&PENDING_LOAD){const raw=PENDING_LOAD;PENDING_LOAD=null;loadBalancesForm(raw);}});
+function readLinkFromHash(){readLoadFromHash();
   let raw=null;if(location.hash.startsWith('#vincular-'))raw=location.hash.slice(10);
   else{const p=new URLSearchParams(location.search).get('vincular');if(p)raw=p;}
   if(!raw)return;
@@ -906,6 +909,7 @@ function enterApp(){
   if(!ui.month){const last=S.tx[0]?.date;const cur=nowLocal();ui.month=monthKey(cur);if(last&&!S.tx.some(t=>monthKey(t.date)===ui.month))ui.month=monthKey(last);}
   if(!SNAP)takeSnap();
   navInit();render();armAutolock();setSync(S.sync?.token?'ok':'off');if(S.sync?.token)syncNow();
+  if(PENDING_LOAD){const raw=PENDING_LOAD;PENDING_LOAD=null;loadBalancesForm(raw);}
 }
 $('#btnCreate').onclick=async()=>{
   const a=$('#pw1').value,b=$('#pw2').value;
@@ -2274,20 +2278,21 @@ function initialBalancesPreview(plan){
     <table style="width:100%;table-layout:fixed;border-collapse:collapse;font-size:13px"><thead><tr><th scope="col" style="text-align:left">Cuenta</th><th scope="col" style="text-align:left">Ahora</th><th scope="col" style="text-align:left">Quedará</th></tr></thead><tbody>${plan.rows.map(r=>`<tr>${[`${esc(r.name)}<div class="tiny muted">${r.currency==='USD'?'US$':'S/'}</div>`,cell(r,false),cell(r,true)].map(c=>`<td style="padding:12px 3px;border-top:1px solid var(--line);overflow-wrap:anywhere;vertical-align:top">${c}</td>`).join('')}</tr>`).join('')}</tbody></table>
     <div class="statgrid" style="margin-top:16px"><div class="stat"><span>Tienes</span><b class="num">${money(plan.act)}</b></div><div class="stat"><span>Debes</span><b class="num ${plan.pas>0?'neg':'muted'}">${money(plan.pas)}</b></div></div><p class="hint">Totales de todas tus cuentas y Personas, en soles con tu tipo de cambio actual. ${plan.rows.some(r=>r.openingTx)?'La deuda en dólares se guarda como un único saldo inicial por tarjeta, sin gasto ni presupuesto.':'No se crean movimientos.'}</p>`;
 }
-function loadBalancesForm(){
+function loadBalancesForm(preset){
   openModal(`<h2>Cargar datos desde archivo</h2><p>Elige tu archivo privado y revisa cómo quedarán tus cuentas. Antes de aplicar se descarga un respaldo cifrado.</p>
     <div class="field"><label for="balancesFile">Archivo de datos (.json)</label><input class="input" type="file" id="balancesFile" accept=".json,application/json"></div>
     <div id="balancesPreview"></div><div class="err" id="balancesErr" role="alert"></div><div class="actions"><button class="btn" id="balancesCancel">Cancelar</button><button class="btn primary" id="balancesApply" disabled>Aplicar</button></div>`,m=>{
     const q=s=>m.querySelector(s);let raw=null,previewState=null,busy=false,selection=0;
     const preview=()=>{const plan=dataFilePlan(raw);q('#balancesPreview').innerHTML=dataFilePreview(plan);previewState=canon(S);return plan;};
     q('#balancesCancel').onclick=closeModal;
-    q('#balancesFile').onchange=async()=>{const ticket=++selection,file=q('#balancesFile').files[0];raw=null;q('#balancesApply').disabled=true;q('#balancesErr').textContent='';q('#balancesPreview').innerHTML='';
+    if(preset){try{raw=preset;preview();q('#balancesApply').disabled=false;q('#balancesFile').closest('.field').innerHTML='<p class="hint">Datos recibidos desde un enlace. Revisa la tabla y toca Aplicar.</p>';}catch(e){raw=null;q('#balancesErr').textContent=e.message;}}
+    if(q('#balancesFile'))q('#balancesFile').onchange=async()=>{const ticket=++selection,file=q('#balancesFile').files[0];raw=null;q('#balancesApply').disabled=true;q('#balancesErr').textContent='';q('#balancesPreview').innerHTML='';
       try{if(!file)return;if(file.size>2*1024*1024)throw new Error('El archivo es demasiado grande (máximo 2 MB).');const parsed=JSON.parse(await file.text());if(ticket!==selection)return;
         raw=parsed;preview();q('#balancesApply').disabled=false;
       }catch(e){if(ticket===selection){raw=null;q('#balancesErr').textContent=e instanceof SyntaxError?'El archivo no contiene un JSON válido.':e.message;}}};
     q('#balancesApply').onclick=async()=>{if(busy||!raw)return;
       if(IS_NATIVE){q('#balancesErr').textContent='Hazlo desde Edge en tu PC para descargar el respaldo. Después sincroniza el celular.';return;}
-      busy=true;for(const id of ['balancesApply','balancesCancel','balancesFile'])q('#'+id).disabled=true;$('#app').inert=true;q('#balancesErr').textContent='';let committed=false;
+      busy=true;for(const id of ['balancesApply','balancesCancel','balancesFile']){const el=q('#'+id);if(el)el.disabled=true;}$('#app').inert=true;q('#balancesErr').textContent='';let committed=false;
       try{await syncBeforeDataChange();if(!m.isConnected||!S||!KEY)throw new Error('Vuelve a abrir la app antes de continuar.');
         if(canon(S)!==previewState){preview();throw new Error('Llegaron cambios de tus equipos. Revisa la tabla actualizada y vuelve a tocar Aplicar.');}
         const plan=dataFilePlan(raw),original=S;await doBackup();clearTimeout(saveTimer);
@@ -2301,7 +2306,7 @@ function loadBalancesForm(){
         if(!S)return;render();openModal(`<h2>Datos cargados: ${plan.rows.length} cuentas, ${(plan.personTx||[]).length} saldos de personas, ${(plan.fijos||[]).length} fijos y ${(plan.receipts||[]).length} comprobantes</h2><p>${SYNC.st==='ok'?'Tu celular los verá al sincronizar.':'Se guardaron en esta PC, pero falta sincronizar. Revisa Más → Celular y sincronización.'}</p><div class="actions"><button class="btn primary" id="balancesDone">Entendido</button></div>`,el=>el.querySelector('#balancesDone').onclick=closeModal);
       }catch(e){if(m.isConnected){q('#balancesErr').textContent=(committed?'Los datos se guardaron. Revisa la sincronización. ':'No se aplicaron datos. ')+e.message;
         if(S)try{preview();}catch(_){raw=null;}}}
-      finally{$('#app').inert=false;busy=false;if(m.isConnected){q('#balancesCancel').disabled=false;q('#balancesFile').disabled=false;q('#balancesApply').disabled=!raw;}}};
+      finally{$('#app').inert=false;busy=false;if(m.isConnected){q('#balancesCancel').disabled=false;if(q('#balancesFile'))q('#balancesFile').disabled=false;q('#balancesApply').disabled=!raw;}}};
   });
 }
 async function syncBeforeDataChange(){
