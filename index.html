@@ -1884,8 +1884,10 @@ function cardMinimum(a,cut,stmt){const d=a.debt||{},explicit=d.minimumByCut?.[cu
 function cardCharges(a,from,to,exclude){let s=0;for(const t of S.tx){const d=t.date.slice(0,10);if(t.id===exclude||t.openingUSD||d<=from||d>to)continue;for(const l of accountParts(t))if(l.acc===a.id&&l.amount<0)s+=-l.amount;}return r2(s);}
 function cardStatement(a,mk,exclude,depth=0){const cut=cardCycle(a,mk).cut,st=a.debt?.statementByCut?.[cut];
  if(st){const pen=+st.facturado||0,usd=+st.facturadoUSD||0;return {cut,amount:r2(pen+toPEN(usd,'USD')),pen,usd,real:true,pagado:st.pagado===true};}
- if(cut<APP_START||depth>36)return {cut,amount:0,pen:0,usd:0,need:true};
- const prevMk=shiftMonth(mk,-1),prevCut=cardCycle(a,prevMk).cut,prev=cardStatement(a,prevMk,exclude,depth+1);
+ const prevMk=shiftMonth(mk,-1),prevCut=cardCycle(a,prevMk).cut;
+ // Si el ciclo empezó antes que la app, sus compras están dentro del saldo inicial: no se puede estimar.
+ if(cut<APP_START||prevCut<APP_START||depth>36)return {cut,amount:0,pen:0,usd:0,need:true};
+ const prev=cardStatement(a,prevMk,exclude,depth+1);
  const prevPaid=prev.pagado?prev.amount:inflow(a.id,prevCut,cut,exclude),carry=prev.need?0:Math.max(0,prev.amount-prevPaid);
  const amount=r2(carry+cardCharges(a,prevCut,cut,exclude));return {cut,amount,pen:amount,usd:0,estimated:true};}
 function cardInfo(a,today=todayStr(),exclude){const d=a.debt||{},debt=Math.max(0,-(balances(exclude)[a.id]||0)),limit=+d.limit||0;
