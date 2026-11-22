@@ -3,3 +3,5 @@ android/misfinanzas.keystore
 node_modules/
 # Datos personales del usuario: nunca publicar
 privado/
+# Capturas de las pruebas
+pruebas/resultados-*/
