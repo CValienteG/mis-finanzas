@@ -63,7 +63,7 @@ svg.i{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8;stro
 .btn:hover{background:var(--soft)}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 .btn.primary:hover{filter:brightness(1.07)}
-.btn.danger{color:var(--neg)}
+#movBody>.sumline{margin-top:12px}.btn.danger{color:var(--neg)}body.selecting .fab{display:none}
 .btn.block{width:100%}
 .btn.sm{padding:6px 12px;font-size:13.5px;min-height:44px;border-radius:var(--r-sm)}
 .btn.ghost{border-color:transparent;background:none;color:var(--accent)}
@@ -481,6 +481,11 @@ details.dmore summary::-webkit-details-marker{display:none}
 .cat-tree{display:flex;flex-direction:column;gap:2px}.cat-node{display:flex;align-items:center;gap:6px;border-bottom:1px solid var(--line,rgba(127,127,127,.2));min-height:40px}.cat-node span{flex:1}.iconbtn.sm{width:32px;height:32px}
 .tree-toggle{padding:0;text-align:left;font:inherit;color:inherit}
 /* v27: arreglos y pulido */
+.searchbar{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:0 12px;margin:12px 0 0;min-height:44px}.searchbar svg{width:18px;height:18px;color:var(--muted);flex-shrink:0}.searchbar input{flex:1;min-width:0;background:none;border:0;color:inherit;font:inherit;font-size:15px;padding:10px 0;outline:none}.searchbar input::-webkit-search-cancel-button{display:none}
+.chips.quick{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}.chips.quick .chip{white-space:nowrap;min-height:34px;cursor:pointer;color:inherit;font:inherit;font-size:13px}.chip.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}.chip.plain{background:none;border:0;padding-left:0;color:var(--muted)}
+.tx.selectable{position:relative;padding-left:40px}.tx.selectable::before{content:"";position:absolute;left:12px;top:50%;width:18px;height:18px;margin-top:-9px;border:2px solid var(--muted);border-radius:6px}.tx.selectable.picked{background:var(--accent-soft)}.tx.selectable.picked::before{background:var(--accent);border-color:var(--accent)}
+.selbar{position:fixed;left:12px;right:12px;bottom:calc(78px + env(safe-area-inset-bottom));z-index:30;display:flex;align-items:center;gap:6px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:8px 10px;box-shadow:0 8px 24px rgba(0,0,0,.35)}.selbar b{flex:1;font-size:13px}.selbar .btn.sm{min-height:40px;padding:0 10px}.btn.danger{color:var(--neg)}
+@media(min-width:821px){.selbar{left:50%;transform:translateX(-50%);width:min(560px,90vw);bottom:24px}}
 .monthbar h2{white-space:nowrap;font-size:clamp(16px,4.6vw,20px)}
 @media(max-width:420px){.acct-row.cols,.grouphdr.cols{grid-template-columns:1fr 1fr;row-gap:4px}.acct-row.cols>.l,.grouphdr.cols>span:first-child{grid-column:1/-1}.acct-row.cols>.c:nth-of-type(2),.grouphdr.cols>.colh:nth-of-type(2){text-align:left;align-items:flex-start}}
 .late{color:var(--neg);font-weight:600}
@@ -617,8 +622,6 @@ function dayLabel(d){const [y,m,dd]=d.slice(0,10).split('-').map(Number);return 
 const b64=u8=>{let s='';for(let i=0;i<u8.length;i+=0x8000)s+=String.fromCharCode.apply(null,u8.subarray(i,i+0x8000));return btoa(s);};
 const unb64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
 const IC={
-  eye:'<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/>',
-  eyeoff:'<path d="M3 3l18 18M10.6 6.1A9.8 9.8 0 0 1 12 6c6 0 9.5 6 9.5 6a17 17 0 0 1-3 3.6M6.4 7.6A16.6 16.6 0 0 0 2.5 12s3.5 6 9.5 6a9.3 9.3 0 0 0 4.2-1M9.9 9.9a3 3 0 0 0 4.2 4.2"/>',
   home:'<path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',
   list:'<path d="M8.5 6H21M8.5 12H21M8.5 18H21M3.5 6h.01M3.5 12h.01M3.5 18h.01"/>',
   card:'<rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19M6.5 15h4"/>',
@@ -999,7 +1002,7 @@ function render(){
   const hl=['personas','fijos','confirmar','cats','budget','sync','ajustes'].includes(ui.tab)?'mas':['tienes','neto','proximos'].includes(ui.tab)?'resumen':ui.tab==='deudas'?'cuentas':ui.tab;document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.tab===hl));
   const v=$('#view');MASK=true;try{
   v.innerHTML=({stats:vStats,tienes:vTienes,neto:vNeto,proximos:vProximos,resumen:vResumen,movs:vMovs,deudas:vDeudas,mas:vMas,cuentas:vCuentas,personas:vPeople,fijos:vFijos,confirmar:vConfirmar,cats:vCats,budget:vBudget,sync:vSync,ajustes:vAjustes})[ui.tab]();
-  }finally{MASK=false;}privIcon();
+  }finally{MASK=false;}privIcon();if(ui.tab!=='movs'){ui.selMode=false;ui.sel=[];}document.body.classList.toggle('selecting',ui.tab==='movs'&&!!ui.selMode);
   const missing=S.tx.filter(t=>[t.acc,t.to,...(t.legs||[]).map(l=>l.acc)].filter(Boolean).some(id=>!acc(id)));
   if(missing.length)v.insertAdjacentHTML('afterbegin',`<p class="note" role="alert">Hay ${missing.length} movimiento(s) de otro equipo con una cuenta eliminada al empezar de cero. Revísalos en Movimientos y elige una cuenta actual al editarlos.</p>`);
   if(ui.tab==='movs')bindFilters();
@@ -1067,11 +1070,11 @@ function greeting(){const h=new Date().getHours();return h<12?'Buenos días':h<1
 function filteredTx(){
   const f=ui.f,q=f.q.trim().toLowerCase();
   return S.tx.filter(t=>{
-    if(txKind(t)==='comprobante'||periodKey(t.date)!==ui.month)return false;
+    if(txKind(t)==='comprobante'||!(f.all&&f.q)&&periodKey(t.date)!==ui.month)return false;
     if(f.type&&(f.type==='transfer'?!['transfer','pago_tarjeta','reembolso','cobro','prestamo_dado','prestamo_recibido','pago_deuda','ajuste'].includes(txKind(t)):txKind(t)!==f.type))return false;
     if(f.acc&&t.acc!==f.acc&&t.to!==f.acc)return false;
     if(f.cat&&!(t.cat===f.cat&&underPath(t.sub,f.sub))&&!(t.legs||[]).some(l=>l.cat===f.cat&&underPath(l.sub,f.sub)))return false;
-    if(q){const hay=[t.note,t.desc,t.cat,t.sub,TX_PRESENTATION[txKind(t)]?.name,SITUATIONS[txKind(t)]?.label,personName(t.person),accName(t.acc),t.to?accName(t.to):''].join(' ').toLowerCase();if(!hay.includes(q))return false;}
+    if(q){const hay=[String(t.amount),(+t.amount||0).toFixed(2),(+t.amount||0).toLocaleString('en-US',{minimumFractionDigits:2}),t.note,t.desc,t.cat,t.sub,TX_PRESENTATION[txKind(t)]?.name,SITUATIONS[txKind(t)]?.label,personName(t.person),accName(t.acc),t.to?accName(t.to):''].join(' ').toLowerCase();if(!hay.includes(q))return false;}
     return true;
   });
 }
@@ -1089,11 +1092,48 @@ function periodCompare(mk){const [a,z]=periodRange(mk),today=todayStr(),ongoing=
  let ing=0,gas=0;for(const t of S.tx){const d=t.date.slice(0,10);if(d<pa||d>upto)continue;ing+=incomePen(t);gas+=expensePen(t);}
  const name=monthLabel(pmk).split(' ')[0].toLowerCase().slice(0,3)+'.';return {ing,gas,label:ongoing?`vs. ${name} a la fecha`:`vs. ${name}`};}
 function cmpTag(now,before,label,income=false){if(before<=.005)return '';const pct=Math.round((now-before)/before*100),dir=Math.abs(pct)<1?'flat':pct>0?'up':'down';return `<span class="cmp ${income?'inc ':''}${dir}">${dir==='flat'?'=':dir==='up'?'▲':'▼'} ${Math.abs(pct)} % ${esc(label)}</span>`;}
-function vMovs(){const list=filteredTx().filter(t=>txKind(t)!=='comprobante'),ing=list.reduce((s,t)=>s+incomePen(t),0),gas=list.reduce((s,t)=>s+expensePen(t),0),days={};list.forEach(t=>(days[t.date.slice(0,10)]??=[]).push(t));
- const rows=Object.entries(days).sort(([a],[b])=>b.localeCompare(a)).map(([d,ts])=>{const i=ts.reduce((s,t)=>s+incomePen(t),0),g=ts.reduce((s,t)=>s+expensePen(t),0);return `<div class="day"><div class="dayhdr"><span>${esc(fmtD(d,{day:'numeric',weekday:'short',month:'short',year:'numeric'}))}</span><span><span class="pos">${money(i)}</span> · <span class="neg">${money(g)}</span></span></div>${ts.map(txRow).join('')}</div>`;}).join('');
+function vMovs(){const f=ui.f;
+ return '<h1 class="page">Movimientos</h1>'+monthBar(`<button class="iconbtn${f.type||f.acc||f.cat?' on':''}" data-act="movementFilters" aria-label="Filtrar">${ic('filter')}</button>`)+`<div class="seg four-seg">${[['diario','Diario'],['calendario','Calendario'],['mensual','Mensual'],['total','Total']].map(([m,l])=>`<button data-act="movementMode" data-mode="${m}" class="${(ui.movMode||'diario')===m?'on':''}">${l}</button>`).join('')}</div>`
+  +`<div class="searchbar">${ic('search')}<input id="movQ" type="search" enterkeyhint="search" autocomplete="off" placeholder="Buscar nota, categoría, cuenta o monto" value="${esc(f.q||'')}" aria-label="Buscar movimientos"><button class="linkbtn${f.q?'':' hidden'}" id="movQX" data-act="movQClear" aria-label="Borrar búsqueda">✕</button></div>`
+  +`<div id="movBody">${movBody()}</div>`;}
+// Lo que cambia al buscar o filtrar, sin volver a dibujar la caja de búsqueda (así no se pierde el cursor).
+function movBody(){const f=ui.f,list=filteredTx().filter(t=>txKind(t)!=='comprobante'),ing=list.reduce((s,t)=>s+incomePen(t),0),gas=list.reduce((s,t)=>s+expensePen(t),0),days={};list.forEach(t=>(days[t.date.slice(0,10)]??=[]).push(t));
+ const sel=new Set(ui.sel||[]),selMode=!!ui.selMode;
+ const rows=Object.entries(days).sort(([a],[b])=>b.localeCompare(a)).map(([d,ts])=>{const i=ts.reduce((s,t)=>s+incomePen(t),0),g=ts.reduce((s,t)=>s+expensePen(t),0);return `<div class="day"><div class="dayhdr"><span>${esc(fmtD(d,{day:'numeric',weekday:'short',month:'short',year:f.all?'numeric':undefined}))}</span><span><span class="pos">${money(i)}</span> · <span class="neg">${money(g)}</span></span></div>${ts.map(t=>selMode?txRow(t).replace('class="tx','class="tx selectable'+(sel.has(t.id)?' picked':'')).replace('data-act="movementDetail"','data-act="movSel"'):txRow(t)).join('')}</div>`;}).join('');
  const cats={};list.forEach(t=>{for(const l of expenseParts(t))cats[l.cat]=(cats[l.cat]||0)+l.pen;});
- return '<h1 class="page">Movimientos</h1>'+monthBar(`<button class="iconbtn" data-act="movementSearch" aria-label="Buscar">${ic('search')}</button><button class="iconbtn" data-act="movementFilters" aria-label="Filtrar">${ic('filter')}</button>`)+`<div class="seg four-seg">${[['diario','Diario'],['calendario','Calendario'],['mensual','Mensual'],['total','Total']].map(([m,l])=>`<button data-act="movementMode" data-mode="${m}" class="${(ui.movMode||'diario')===m?'on':''}">${l}</button>`).join('')}</div>`+(()=>{const c=Object.values(ui.f).some(Boolean)||PRIV?null:periodCompare(ui.month);return summaryStrip([['Ingresos',money(ing)+(c?cmpTag(ing,c.ing,c.label,true):''),'pos'],['Gastos',money(gas)+(c?cmpTag(gas,c.gas,c.label):''),'neg'],['Balance',money(ing-gas)]]);})()+`<div class="chips"><span class="chip">${list.length} ${list.length===1?'movimiento':'movimientos'}</span>${Object.values(ui.f).some(Boolean)?'<button class="chip" data-act="clearF">Quitar filtros</button>':''}</div>`+(ui.movMode==='calendario'?movCalendar(list):ui.movMode==='total'?movTotal():ui.movMode==='mensual'?`<div class="card" style="margin-top:16px">${Object.entries(cats).map(([c,v])=>`<div class="budrow"><b>${esc(displayLabel(c))}</b><span class="neg num">${money(v)}</span>${progressBar(v,gas)}</div>`).join('')||'<p class="muted">Sin gastos este mes.</p>'}</div>`:rows||'<div class="empty"><b>No hay movimientos</b>Toca + para registrar.</div>');}
-function bindFilters(){}
+ const filtered=!!(f.q||f.type||f.acc||f.cat),c=filtered||PRIV?null:periodCompare(ui.month);
+ const chip=(on,act,label,extra='')=>`<button class="chip${on?' on':''}" data-act="${act}"${extra}>${label}</button>`;
+ const quick=`<div class="chips quick">${chip(f.type==='gasto','movType','Gastos',' data-type="gasto"')}${chip(f.type==='ingreso','movType','Ingresos',' data-type="ingreso"')}${chip(f.type==='transfer','movType','Otros',' data-type="transfer"')}${chip(!!f.acc,'movAccPick',f.acc?esc(accName(f.acc))+' ✕':'Cuenta ▾')}${chip(!!f.cat,'movCatPick',f.cat?esc(displayLabel(f.sub?pathLast(f.sub):f.cat))+' ✕':'Categoría ▾')}${f.q?chip(!!f.all,'movAll',f.all?'Todos los meses ✓':'Buscar en todos los meses'):''}${chip(selMode,'movSelMode',selMode?'Listo':'Seleccionar')}</div>`;
+ const head=summaryStrip([['Ingresos',money(ing)+(c?cmpTag(ing,c.ing,c.label,true):''),'pos'],['Gastos',money(gas)+(c?cmpTag(gas,c.gas,c.label):''),'neg'],['Balance',money(ing-gas)]])
+  +quick+`<div class="chips"><span class="chip plain">${list.length} ${list.length===1?'movimiento':'movimientos'}${f.all?' en todos los meses':''}</span>${filtered?'<button class="chip" data-act="clearF">Quitar filtros</button>':''}</div>`;
+ const bar=selMode?`<div class="selbar" role="toolbar" aria-label="Movimientos seleccionados"><b>${sel.size} ${sel.size===1?'elegido':'elegidos'}</b><button class="btn sm" data-act="bulkCat" ${sel.size?'':'disabled'}>Categoría</button><button class="btn sm" data-act="bulkAcc" ${sel.size?'':'disabled'}>Cuenta</button><button class="btn sm danger" data-act="bulkDel" ${sel.size?'':'disabled'}>Borrar</button></div>`:'';
+ const mode=f.all?'diario':ui.movMode;
+ return head+(mode==='calendario'?movCalendar(list):mode==='total'?movTotal():mode==='mensual'?`<div class="card" style="margin-top:16px">${Object.entries(cats).map(([c,v])=>`<div class="budrow"><b>${esc(displayLabel(c))}</b><span class="neg num">${money(v)}</span>${progressBar(v,gas)}</div>`).join('')||'<p class="muted">Sin gastos este mes.</p>'}</div>`:rows||`<div class="empty"><b>${filtered?'Nada coincide':'No hay movimientos'}</b>${filtered?'Prueba con otra palabra o quita los filtros.':'Toca + para registrar.'}</div>`)+bar;}
+function refreshMovs(){const b=$('#movBody');if(!b)return render();MASK=true;try{b.innerHTML=movBody();}finally{MASK=false;}paintIcons(b);document.body.classList.toggle('selecting',!!ui.selMode);}
+// Elegir cuenta o categoría para filtrar, en una hoja con botones (como los filtros rápidos de Wallet).
+function movPick(what){const body=what==='acc'?`<div class="account-picker">${orderedAccounts().filter(a=>!a.archived).map(a=>`<button class="btn" data-pick="${esc(a.id)}">${esc(a.name)}</button>`).join('')}</div>`
+  :`<div class="field"><select class="input" id="pickCat"><option value="">Elige una categoría</option>${filterCatOptions('')}</select></div><button class="btn primary block" id="pickOk">Ver movimientos</button>`;
+ openModal(`<h2>${what==='acc'?'¿Qué cuenta?':'¿Qué categoría?'}</h2>${body}`,m=>{m.addEventListener('click',e=>{const b=e.target.closest('[data-pick]');if(b){const id=b.dataset.pick;closeModal();ui.f.acc=id;render();}});
+  const ok=m.querySelector('#pickOk');if(ok)ok.onclick=()=>{const [cat,sub]=(m.querySelector('#pickCat').value||'').split('|');if(!cat)return;closeModal();ui.f.cat=cat;ui.f.sub=sub||'';render();};});}
+// Editar varios movimientos a la vez (Wallet: «Bulk edit»). Siempre con deshacer.
+async function bulkEdit(what){const ids=new Set(ui.sel||[]),list=S.tx.filter(t=>ids.has(t.id));if(!list.length)return;const key=KEY,before=list.map(t=>structuredClone(t));
+ const undo=()=>{if(!S||KEY!==key)return;for(const o of before){const i=S.tx.findIndex(t=>t.id===o.id);if(i>=0)S.tx[i]=o;else S.tx.push(o);}sortTx();save();render();};
+ const done=msg=>{ui.sel=[];ui.selMode=false;save();render();toast(msg,7000,{label:'Deshacer',fn:undo});};
+ if(what==='del'){const linked=list.filter(t=>S.tx.some(x=>x.rel===t.id));if(linked.length){toast(`${linked.length} tienen pagos vinculados; revísalos uno por uno.`);return;}
+  if(!await ask({title:`¿Borrar ${list.length} ${list.length===1?'movimiento':'movimientos'}?`,text:'Podrás deshacerlo.',ok:'Borrar',danger:true}))return;if(!S||KEY!==key)return;S.tx=S.tx.filter(t=>!ids.has(t.id));done(`${list.length} borrados`);return;}
+ const kinds=new Set(list.map(txKind));
+ if(what==='cat'){if(kinds.size!==1||!['gasto','ingreso'].includes([...kinds][0])||list.some(t=>(t.legs||[]).length)){toast('La categoría se cambia en gastos o en ingresos simples, no mezclados.');return;}
+  const type=[...kinds][0],opts=Object.keys(S.cats[type]||{}).map(c=>`<option value="${esc(c)}">${esc(displayLabel(c))}</option>`+catNodes(type,c).map(n=>`<option value="${esc(c+'|'+n)}">${'  '.repeat(pathParts(n).length)}${esc(displayLabel(pathLast(n)))}</option>`).join('')).join('');
+  openModal(`<h2>Nueva categoría para ${list.length}</h2><div class="field"><select class="input" id="bulkCatSel"><option value="">Elige</option>${opts}</select></div><button class="btn primary block" id="bulkOk">Cambiar</button>`,m=>{m.querySelector('#bulkOk').onclick=()=>{const [cat,sub]=(m.querySelector('#bulkCatSel').value||'').split('|');if(!cat)return;if(!S||KEY!==key)return;for(const t of S.tx)if(ids.has(t.id)){t.cat=cat;t.sub=sub||'';}closeModal();done(`Categoría cambiada en ${list.length}`);};});return;}
+ if(what==='acc'){const cur=new Set(list.map(t=>acc(t.acc)?.currency));if(!list.every(t=>['gasto','ingreso'].includes(txKind(t))&&t.acc&&!(t.legs||[]).length)||cur.size!==1){toast('La cuenta se cambia en gastos o ingresos simples de la misma moneda.');return;}
+  const c=[...cur][0],ok=a=>!a.archived&&a.currency===c&&!['porpagar','porcobrar'].includes(a.type)&&(a.type!=='tarjeta'||kinds.has('gasto')&&kinds.size===1);
+  openModal(`<h2>¿A qué cuenta los mueves?</h2><div class="account-picker">${orderedAccounts().filter(ok).map(a=>`<button class="btn" data-pick="${esc(a.id)}">${esc(a.name)}</button>`).join('')}</div>`,m=>{m.addEventListener('click',e=>{const b=e.target.closest('[data-pick]');if(!b||!S||KEY!==key)return;for(const t of S.tx)if(ids.has(t.id))t.acc=b.dataset.pick;closeModal();done(`Cuenta cambiada en ${list.length}`);});});}
+}
+// Mantener presionado un movimiento abre la selección.
+(()=>{let timer=null,fired=false;document.addEventListener('pointerdown',e=>{fired=false;const r=e.target.closest('#movBody .tx[data-act="movementDetail"]');if(!r)return;timer=setTimeout(()=>{fired=true;ui.selMode=true;ui.sel=[r.dataset.id];refreshMovs();navigator.vibrate?.(20);},550);});
+ ['pointerup','pointercancel','pointermove'].forEach(ev=>document.addEventListener(ev,e=>{if(ev==='pointermove'&&Math.abs(e.movementY)<4)return;clearTimeout(timer);}));
+ document.addEventListener('click',e=>{if(fired){fired=false;e.stopPropagation();e.preventDefault();}},true);})();
+function bindFilters(){const i=$('#movQ');if(!i)return;let timer;i.oninput=()=>{$('#movQX')?.classList.toggle('hidden',!i.value);clearTimeout(timer);timer=setTimeout(()=>{ui.f.q=i.value;if(!i.value)ui.f.all=false;refreshMovs();},180);};i.onkeydown=e=>{if(e.key==='Enter')i.blur();};}
 // Calendario del mes: cada día con lo que entró (azul) y salió (rojo). Tocar un día abre sus movimientos.
 function movCalendar(list){const [a,z]=periodRange(ui.month),byDay={};list.forEach(t=>(byDay[t.date.slice(0,10)]??=[]).push(t));
  const first=new Date(a+'T12:00'),lead=(first.getDay()+6)%7,days=[];for(let d=a;d<=z;d=addDays(d,1))days.push(d);const today=todayStr();
@@ -2350,7 +2390,7 @@ async function doAct(d){
     case 'movementDetail':movementDetail(d.id);break;
     case 'copyTx':{const t=structuredClone(S.tx.find(t=>t.id===d.id));delete t.id;delete t.u;delete t.fijo;delete t.per;if(t.educationSalary)t.amount=t.salaryNet??t.amount;t.date=nowLocal();situationForm(txKind(t),null,t);break;}
     case 'deleteTx':await deleteMovement(d.id);break;
-    case 'movementSearch':movementFilters(true);break;
+    case 'movementSearch':if($('#movQ'))$('#movQ').focus();else movementFilters(true);break;
     case 'movementFilters':movementFilters();break;
     case 'movementMode':ui.movMode=d.mode;render();break;
     case 'calDay':calDay(d.day);break;
@@ -2371,6 +2411,16 @@ async function doAct(d){
     case 'filterCat':ui.f={q:'',type:'',acc:'',cat:d.cat};ui.tab='movs';render();window.scrollTo(0,0);break;
     case 'filterAcc':ui.f={q:'',type:'',acc:d.id,cat:''};ui.tab='movs';render();window.scrollTo(0,0);break;
     case 'clearF':ui.f={q:'',type:'',acc:'',cat:''};render();break;
+    case 'movQClear':ui.f.q='';ui.f.all=false;render();$('#movQ')?.focus();break;
+    case 'movType':ui.f.type=ui.f.type===d.type?'':d.type;refreshMovs();break;
+    case 'movAll':ui.f.all=!ui.f.all;refreshMovs();break;
+    case 'movAccPick':if(ui.f.acc){ui.f.acc='';refreshMovs();}else movPick('acc');break;
+    case 'movCatPick':if(ui.f.cat){ui.f.cat='';ui.f.sub='';refreshMovs();}else movPick('cat');break;
+    case 'movSelMode':ui.selMode=!ui.selMode;ui.sel=[];refreshMovs();break;
+    case 'movSel':{const set=new Set(ui.sel||[]);set.has(d.id)?set.delete(d.id):set.add(d.id);ui.sel=[...set];refreshMovs();break;}
+    case 'bulkCat':bulkEdit('cat');break;
+    case 'bulkAcc':bulkEdit('acc');break;
+    case 'bulkDel':bulkEdit('del');break;
     case 'newAcc':accForm();break;
     case 'editAcc':accForm(acc(d.id));break;
     case 'addCat':{const n=await ask({title:`Nueva categoría de ${d.type==='gasto'?'gasto':'ingreso'}`,input:{label:'Nombre'}});
