@@ -96,8 +96,8 @@ const link='#cargar-'+Buffer.from(JSON.stringify({app:'mis-finanzas-carga',v:1,f
   assert.equal(await p.evaluate(()=>filteredTx().length),5);
 
   // Presupuesto por nivel.
-  await p.evaluate(()=>{ui.tab='budget';render();});await p.click('[data-act=budOpen][data-key="gasto|HIJA|EDUCACIÓN"]');await p.click('[data-act=budOpen][data-key="gasto|HIJA|EDUCACIÓN › COLEGIO"]');
-  await p.waitForSelector('[data-budget-key="HIJA|EDUCACIÓN › COLEGIO › PENSIONES"]');
+  // v29: el presupuesto se ve en tarjetas; la meta de Colegio se movió a su nivel nuevo.
+  await p.evaluate(()=>{ui.tab='budget';render();});await p.waitForSelector('.budcard[data-key="HIJA"]');await p.waitForSelector('.budcard[data-key="HIJA|EDUCACIÓN › COLEGIO"]');
   await p.screenshot({path:path.join(folder,`${width}-${colorScheme}-presupuesto.png`),fullPage:true});
   // Categorías: árbol con + en cada nivel.
   await p.evaluate(()=>{ui.tab='cats';ui.catType='gasto';render();});await p.click('[data-act=catSheet][data-cat="HIJA"]');await p.waitForSelector('.cat-tree');
