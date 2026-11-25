@@ -1787,7 +1787,7 @@ function mountRegistration(m,kind,t,pre){
  const rows=document.createElement('div');rows.className='engine-rows';m.append(rows);
  const panel=document.createElement('section');panel.className='entry-panel hidden';panel.setAttribute('aria-label','Dato del registro');m.append(panel);
  const final=document.createElement('div');final.className='entry-final';if(err)final.append(err);const warning=source.querySelector('#incomeWarning');if(warning)final.append(warning);if(foot)final.append(foot);m.append(final);
- const moved=[];let current=null,currency=t?.currency||pre.currency||acc(q('#'+ids.cuenta)?.value)?.currency||'PEN',chain=fields.filter(f=>!['fecha','devolucion','direccion'].includes(f)),dirty=false;
+ const moved=[];let current=null,currency=t?.currency||pre.currency||acc(q('#'+ids.cuenta)?.value)?.currency||'PEN',chain=fields.filter(f=>!['fecha','devolucion','direccion'].includes(f)),dirty=false,editing=false;
  const save=q(basic?'#fSave':'#sSave'),saveOriginal=save.onclick;m.currencyExplicit=!!pre.currency||!!(t&&txCurrency(t)!==acc(t.acc)?.currency);
  const currencyNow=()=>basic&&kind!=='transfer'?currency:acc(q('#'+ids.cuenta)?.value)?.currency||'PEN';
  function value(f){const el=q('#'+ids[f]);if(!el)return '';if(f==='monto')return el.value?currencyAmount(+el.value,currencyNow()):'Escribe el monto';
@@ -1802,7 +1802,7 @@ function mountRegistration(m,kind,t,pre){
  function move(el){if(!el)return;const marker=document.createComment('panel');el.before(marker);moved.push([el,marker]);panel.append(el);}
  function write(el,v,event='input'){el.value=v;el.dispatchEvent(new Event(event,{bubbles:true}));dirty=true;refresh();}
  function closePanel(push=true){restoreControls();current=null;panel.replaceChildren();panel.classList.add('hidden');if(push)history.pushState({mf:navCurrent,panel:null},'');refresh();document.activeElement?.blur();}
- function next(){const i=chain.indexOf(current),n=chain[i+1];if(n)open(n);else closePanel();}
+ function next(){if(editing){closePanel();return;}const i=chain.indexOf(current),n=chain[i+1];if(n)open(n);else closePanel();}
  function open(f,push=true){if(!fields.includes(f)){closePanel(false);return;}restoreControls();panel.replaceChildren();current=f;panel.classList.remove('hidden');panel.innerHTML=`<div class="panel-head"><b>${labels[f]}</b><button type="button" class="btn" data-panel-done>Listo</button></div>`;
   if(push)history.pushState({mf:navCurrent,panel:f},'');const el=q('#'+ids[f]);
   panel.done=next;if(f==='monto'||['interes','comision','equivalente'].includes(f)){
@@ -1832,8 +1832,8 @@ function mountRegistration(m,kind,t,pre){
   }
   refresh();panel.scrollIntoView({block:'nearest'});
  }
- rows.onclick=e=>{const b=e.target.closest('[data-field]');if(b)open(b.dataset.field);};
- panel.addEventListener('click',e=>{if(e.target.closest('[data-pay],#sQuota')){queueMicrotask(()=>open('monto',false));return;}if(e.target.closest('[data-panel-done]'))panel.done();const b=e.target.closest('[data-c],[data-s]');if(b&&!['__new'].includes(b.dataset.c||b.dataset.s)){dirty=true;queueMicrotask(()=>{if(current==='categoria'){if((S.cats[kind]?.[q('#fCat').value]||[]).length)open('subcategoria');else open('cuenta');}else if(current==='subcategoria'&&b.dataset.leaf!=='0')next();});}});
+ rows.onclick=e=>{const b=e.target.closest('[data-field]');if(b){editing=true;open(b.dataset.field);}};
+ panel.addEventListener('click',e=>{if(e.target.closest('[data-pay],#sQuota')){queueMicrotask(()=>open('monto',false));return;}if(e.target.closest('[data-panel-done]'))panel.done();const b=e.target.closest('[data-c],[data-s]');if(b&&!['__new'].includes(b.dataset.c||b.dataset.s)){dirty=true;queueMicrotask(()=>{if(current==='categoria'){if((S.cats[kind]?.[q('#fCat').value]||[]).length)open('subcategoria');else if(editing)closePanel();else open('cuenta');}else if(current==='subcategoria'&&b.dataset.leaf!=='0')next();});}});
  m.addEventListener('input',()=>{dirty=true;refresh();});m.addEventListener('change',event=>{if(event.target.id===ids.cuenta&&!m.currencyExplicit){currency=acc(event.target.value)?.currency||'PEN';m.entryCurrency?.(currency);}dirty=true;refresh();});
  m.engine={open,closePanel,refresh,get panel(){return current;},get dirty(){return dirty;},history(state){if(current){closePanel(false);history.replaceState({mf:navCurrent,panel:null},'');}else if(state.panel)open(state.panel,false);}};
  const exit=()=>{if(!dirty||confirm('¿Descartar? Se perderá este registro sin guardar.')){closePanel(false);closeModal();}};
