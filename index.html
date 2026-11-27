@@ -608,6 +608,23 @@ header.top .iconbtn.on{color:var(--accent)}
 .card.list .debt-row .l b,.home-block .debt-row .l b{font-weight:550}
 .dayhdr.rc .num.small{font-weight:500}
 .card.list{margin-top:10px}.grouphdr+.card.list{margin-top:0}
+/* Inicio v39: «Por hacer» con un verbo por fila */
+.sumline.two{grid-template-columns:repeat(2,minmax(0,1fr))}
+.sumline.two .val{font-size:18px}
+.todo{display:grid;grid-template-columns:10px minmax(0,1fr) auto;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--line);cursor:pointer}
+.todo:last-of-type{border-bottom:0}
+.todo .dot{width:8px;height:8px;border-radius:50%;background:var(--accent)}
+.todo.late .dot{background:var(--neg)}
+.todo .tl{display:flex;flex-direction:column;min-width:0}
+.todo .tl b{font-weight:600;font-size:14.5px;line-height:1.3}
+.todo .tl span{font-size:12.5px;color:var(--muted);line-height:1.35}
+.todo.late,.todo.late .tl b{color:var(--ink)}
+.todo.late .tl span{color:var(--neg)}
+.home-extra{display:block;width:100%;background:none;border:0;border-bottom:1px solid var(--line);margin:0 calc(-1*var(--bleed));width:calc(100% + 2*var(--bleed));padding:0 16px 9px;text-align:center;font-size:12.5px;color:var(--muted);cursor:pointer}
+.home-custom{margin-bottom:90px}
+.home-summary .sumline:has(+.home-extra){border-bottom:0}
+.todo>.num{font-weight:600;white-space:nowrap}
+.home-block+.sumline{margin-top:0}
 /* páginas internas */
 .pagehead{margin:10px 0 6px}
 .pagehead .back{background:none;border:0;color:var(--ink)}
@@ -2246,12 +2263,12 @@ function vTienes(){const n=netWorth(),pt=peopleTotals(),b=n.b,groups=['Efectivo'
 function vNeto(){const n=netWorth();return backHead('Neto','Lo que tienes menos lo que debes.')+`<div class="card list"><div class="debt-row" data-act="goto" data-tab="tienes"><div class="l"><b>Tienes</b><span class="small muted">Cuentas disponibles y lo que te deben</span></div><div class="r"><b class="num">${money(n.act)}</b></div></div><div class="debt-row" data-act="goto" data-tab="deudas"><div class="l"><b>Debes</b><span class="small muted">Tarjetas, préstamos, personas y empresas</span></div><div class="r"><b class="num neg">− ${money(n.pas)}</b></div></div><div class="debt-row static"><div class="l"><b>Neto</b></div><div class="r"><b class="num ${n.act-n.pas<0?'neg':''}">${money(n.act-n.pas)}</b></div></div></div>${n.retained>.005?`<p class="hint">Si sumas el ahorro retenido (${money(n.retained)}), tu neto sería ${money(n.act-n.pas+n.retained)}.</p>`:''}`;}
 function vProximos(){const all=upcomingPayments(31,todayStr(),true),today=todayStr(),week=all.filter(e=>e.date<=addDays(today,7)),later=all.filter(e=>e.date>addDays(today,7));
  return backHead('Próximos pagos','Pagos de tarjetas, cuotas y pagos o ingresos fijos de los próximos 30 días.')+(week.length?`<div class="grouphdr"><span>Próximos 7 días</span></div><div class="card list">${week.map(upcomingRow).join('')}</div>`:'')+(later.length?`<div class="grouphdr"><span>Hasta 30 días</span></div><div class="card list">${later.map(upcomingRow).join('')}</div>`:'')+(all.length?'':'<div class="empty"><b>Sin pagos próximos</b>Agrega tus pagos fijos en Más → Pagos fijos.</div>')+`<div class="actions"><button class="btn" data-act="goto" data-tab="fijos">Pagos fijos</button></div>`;}
-function homeCustomize(){const cfg=S.settings.home||{},known=HOME_BLOCKS.map(b=>b[0]),order=[...(cfg.order||[]).filter(id=>known.includes(id)),...known.filter(id=>!(cfg.order||[]).includes(id))],hidden=new Set(cfg.hidden||[]),name=id=>HOME_BLOCKS.find(b=>b[0]===id)[1];
- openModal(`<h2>Personalizar inicio</h2><p class="hint">Elige qué ver en Inicio y en qué orden. Se aplica en tu celular y en tu PC.</p><div class="card list">${order.map((id,i)=>`<div class="acct"><label class="nm"><input type="checkbox" data-home-show="${id}" ${homeVisible(id)?'checked':''}> ${esc(name(id))}</label><button class="btn" data-home-move="${id}" data-dir="-1" ${!i?'disabled':''} aria-label="Subir">↑</button><button class="btn" data-home-move="${id}" data-dir="1" ${i===order.length-1?'disabled':''} aria-label="Bajar">↓</button></div>`).join('')}</div><div class="actions"><button class="btn" id="homeReset">Restablecer</button><button class="btn primary" id="homeDone">Listo</button></div>`,m=>{
-  const store=(o,h,sh)=>{S.settings.home={order:o,hidden:[...h],shown:[...sh]};save();render();homeCustomize();};const shown=new Set(cfg.shown||[]);
+function homeCustomize(){const cfg=S.settings.home2||{},known=HOME_BLOCKS.map(b=>b[0]),order=[...(cfg.order||[]).filter(id=>known.includes(id)),...known.filter(id=>!(cfg.order||[]).includes(id))],hidden=new Set(cfg.hidden||[]),name=id=>HOME_BLOCKS.find(b=>b[0]===id)[1];
+ openModal(`<h2>Personalizar inicio</h2><p class="hint">Arriba siempre están tus saldos, «Por hacer» y el mes. Aquí puedes sumar más bloques debajo. Se aplica en tu celular y en tu PC.</p><div class="card list">${order.map((id,i)=>`<div class="acct"><label class="nm"><input type="checkbox" data-home-show="${id}" ${homeVisible(id)?'checked':''}> ${esc(name(id))}</label><button class="btn" data-home-move="${id}" data-dir="-1" ${!i?'disabled':''} aria-label="Subir">↑</button><button class="btn" data-home-move="${id}" data-dir="1" ${i===order.length-1?'disabled':''} aria-label="Bajar">↓</button></div>`).join('')}</div><div class="actions"><button class="btn" id="homeReset">Restablecer</button><button class="btn primary" id="homeDone">Listo</button></div>`,m=>{
+  const store=(o,h,sh)=>{S.settings.home2={order:o,hidden:[...h],shown:[...sh]};save();render();homeCustomize();};const shown=new Set(cfg.shown||[]);
   m.onchange=e=>{const id=e.target.dataset.homeShow;if(!id)return;if(e.target.checked){hidden.delete(id);shown.add(id);}else{hidden.add(id);shown.delete(id);}store(order,hidden,shown);};
   m.onclick=e=>{const b=e.target.closest('[data-home-move]');if(b){const i=order.indexOf(b.dataset.homeMove),j=i+Number(b.dataset.dir);if(order[j]){[order[i],order[j]]=[order[j],order[i]];store(order,hidden,shown);}return;}
-   if(e.target.id==='homeReset'){delete S.settings.home;save();render();homeCustomize();}if(e.target.id==='homeDone')closeModal();};});}
+   if(e.target.id==='homeReset'){delete S.settings.home2;save();render();homeCustomize();}if(e.target.id==='homeDone')closeModal();};});}
 function moneySummary(){const n=netWorth();return summaryStrip([['Tienes',money(n.act)],['Debes',money(n.pas),n.pas>.005?'neg':'muted'],['Neto',money(n.act-n.pas)]])+(n.retained?`<p class="muted small">Ahorro retenido ${money(n.retained)}</p>`:'');}
 function accountGroup(a){if(a.type==='efectivo')return 'Efectivo';if(a.type==='banco')return /BCP/i.test(a.name)?'Banco BCP':/IBK|Interbank/i.test(a.name)?'Banco Interbank':'Otros bancos';if(['ahorro','inversion'].includes(a.type))return 'Ahorros';if(a.type==='tarjeta')return 'Tarjetas';if(a.type==='porpagar')return 'Préstamos';return 'Te deben';}
 function orderedAccounts(){return [...S.accounts].sort((a,b)=>(a.order??S.accounts.indexOf(a))-(b.order??S.accounts.indexOf(b)));}
@@ -2346,15 +2363,46 @@ function blockCard(title,value,small,act,tab){return `<section class="card home-
 function lateText(e){const today=todayStr();if(e.kind==='education'||e.income||!e.date||e.date>=today)return '';const d=daysBetween(e.date,today);return `Atrasado · hace ${d} ${d===1?'día':'días'}`;}
 function upcomingRow(e){return `<div class="payrow" data-act="${e.act||'goto'}" ${e.id?`data-id="${e.id}"`:''}${e.per?` data-per="${e.per}"`:''}${e.tab?` data-tab="${e.tab}"`:''}><div class="pdate"><b>${+e.date.slice(8)}</b><span>${esc(fmtD(e.date,{month:'short'}))}</span></div><div class="pname"><b>${esc(e.name)}</b>${lateText(e)?`<span class="late">${esc(lateText(e))}</span>`:`<span>${esc(e.advice||fmtD(e.date))}</span>`}</div>${e.kind==='education'?'':`<b class="num ${e.income?'pos':'neg'}">${currencyAmount(e.nativeAmount??e.amount,e.currency||'PEN')}</b>`}</div>`;}
 // Inicio: cada bloque abre exactamente lo que muestra. El usuario elige qué bloques ver y en qué orden.
-const HOME_BLOCKS=[['resumen','Tienes · Debes · Neto',1],['cuentas','Mis cuentas (saldos)',1],['deudas','Deudas pendientes',1],['tedeben','Te deben',1],['proximos','Próximos pagos',1],['confirmar','Por confirmar',1],['mes','Este mes',1],['ultimos','Últimos movimientos',1],
+// v39: Inicio responde dos preguntas fijas (qué tienes que hacer y cómo vas este mes). Lo demás ya vive en Cuentas o
+// Movimientos; se puede sumar a Inicio desde «Personalizar inicio», pero viene apagado.
+const HOME_BLOCKS=[['cuentas','Mis cuentas (saldos)',0],['tedeben','Te deben',0],['ultimos','Últimos movimientos',0],
  ['tarjetas','Tarjetas: pago del mes y disponible',0],['fijosmes','Pagos fijos del mes',0],['flujo','¿Te alcanza? Saldo más bajo en 30 días',0],['metas','Metas',0],['gastoscat','Gastos del mes por categoría',0],['presupuesto','Presupuesto: categorías al límite',0],['bonificacion','Bonificación educacional',0]];
-function homeVisible(id){const cfg=S.settings.home||{};if((cfg.hidden||[]).includes(id))return false;if((cfg.shown||[]).includes(id))return true;return !!HOME_BLOCKS.find(b=>b[0]===id)?.[2];}
-function homeLayout(){const cfg=S.settings.home||{},known=HOME_BLOCKS.map(b=>b[0]),order=(cfg.order||[]).filter(id=>known.includes(id));
+function homeVisible(id){const cfg=S.settings.home2||{};if((cfg.hidden||[]).includes(id))return false;if((cfg.shown||[]).includes(id))return true;return !!HOME_BLOCKS.find(b=>b[0]===id)?.[2];}
+function homeLayout(){const cfg=S.settings.home2||{},known=HOME_BLOCKS.map(b=>b[0]),order=(cfg.order||[]).filter(id=>known.includes(id));
  for(const id of known)if(!order.includes(id)){const i=known.indexOf(id),prev=known.slice(0,i).reverse().find(x=>order.includes(x));order.splice(prev?order.indexOf(prev)+1:0,0,id);}
  return order.filter(homeVisible);}
 function homeSummary(){const n=netWorth(),edu=typeof educationAccount==='function'?educationAccount():null,cell=(tab,label,value,cls='')=>`<div class="tap" data-act="goto" data-tab="${tab}"><div class="lbl">${label}</div><div class="val num ${cls}">${value}</div></div>`;
  return `<section class="home-summary"><div class="sumline">${cell('tienes','Tienes',money(n.act))}${cell('deudas','Debes',money(n.pas),n.pas>.005?'neg':'muted')}${cell('neto','Neto',money(n.act-n.pas))}</div>${n.retained>.005?`<button class="linkbtn small retained" ${edu?`data-act="accountDetail" data-id="${esc(edu.id)}"`:'data-act="goto" data-tab="cuentas"'}>Ahorro retenido ${money(n.retained)} ›</button>`:''}</section>`;}
-function vResumen(){const n=netWorth(),p=peopleTotals(),tot=monthTotals(ui.month),b=budgetRows(ui.month),budget=b.reduce((s,r)=>s+r.lim,0),up=upcomingPayments(7),next=upcomingPayments(31,todayStr(),true).find(e=>e.amount>.005&&!e.income),expected=typeof budgetExpected==='function'?budgetExpected(ui.month,'ingreso'):0,pending=typeof pendingFixed==='function'?pendingFixed():[];
+// ---------- Inicio (v39) ----------
+// 1) Cuánto tienes en tus cuentas y cuánto debes. 2) «Por hacer»: lo que hay que pagar, abonar o confirmar en 7 días,
+// cada fila con un verbo y su fecha en palabras. 3) El mes, con la misma franja que Movimientos.
+function whenText(date){const today=todayStr(),d=daysBetween(today,date);if(d<0)return `atrasado · era el ${fmtD(date)}`;if(d===0)return 'hoy';if(d===1)return 'mañana';return `el ${fmtD(date,{weekday:'short',day:'numeric',month:'short'})} (en ${d} días)`;}
+function todoItems(today=todayStr()){const seen=new Set(),out=[];
+ const add=e=>{const k=(e.kind||'')+'|'+(e.id||e.name)+'|'+(e.per||e.date);if(seen.has(k))return;seen.add(k);out.push(e);};
+ for(const o of (typeof pendingFixed==='function'?pendingFixed(today):[]))add({id:o.f.id,per:o.per,date:o.date,name:o.f.name,amount:o.amount,nativeAmount:o.nativeAmount,currency:o.currency,income:o.income,act:'confirmFixed',kind:'fixed'});
+ for(const e of upcomingPayments(7,today))add(e);
+ return out.map(e=>{const late=e.date<today;let title=e.name,verb='';
+  if(e.kind==='fixed'){const f=allFixed().find(x=>x.id===e.id),a=f?acc(f.template?.acc):null;
+   if(e.income){verb=late?'Confirmar que recibiste':'Recibir';}
+   else if(late){verb='Confirmar';}
+   else if(a&&isCard(a)){verb='Abonar a '+a.name;title='';e={...e,sub:`${e.name} se cobra ${whenText(e.date)}`};}
+   else verb='Pagar';}
+  else if(e.kind==='debt'){const a=acc(e.id);verb=a&&!isCard(a)?'Pagar la cuota de':'Pagar';}
+  else if(e.kind==='person')verb='Devolver a';
+  return {...e,late,title:[verb,title].filter(Boolean).join(' '),sub:e.sub||(e.kind==='education'?e.advice:whenText(e.date))};}).sort((x,y)=>x.date.localeCompare(y.date));}
+function homeCore(){const n=netWorth(),pt=peopleTotals(),today=todayStr(),inAcc=r2(n.act-pt.receivable),tot=monthTotals(ui.month),items=todoItems(today);
+ const extra=[pt.receivable>.005?`Te deben ${money(pt.receivable)}`:'',n.retained>.005?`Ahorro retenido ${money(n.retained)}`:''].filter(Boolean);
+ const top=`<section class="home-summary"><div class="sumline two">
+   <div class="tap" data-act="goto" data-tab="cuentas"><div class="lbl">En tus cuentas</div><div class="val num">${money(inAcc)}</div></div>
+   <div class="tap" data-act="goto" data-tab="deudas"><div class="lbl">Debes</div><div class="val num ${n.pas>.005?'neg':'muted'}">${money(n.pas)}</div></div></div>
+   ${extra.length?`<button class="home-extra" data-act="goto" data-tab="cuentas">${extra.join(' · ')} ›</button>`:''}</section>`;
+ const row=e=>`<div class="todo${e.late?' late':''}" data-act="${e.act||'goto'}" ${e.id?`data-id="${esc(e.id)}"`:''}${e.per?` data-per="${e.per}"`:''}${e.tab?` data-tab="${e.tab}"`:''}><span class="dot"></span><div class="tl"><b>${esc(e.title)}</b><span>${esc(e.sub||'')}</span></div>${e.kind==='education'||!(e.amount>.005)?'':`<b class="num ${e.income?'pos':'neg'}">${currencyAmount(e.nativeAmount??e.amount,e.currency||'PEN')}</b>`}</div>`;
+ const todo=`<section class="home-block static"><div class="cardhead"><h3>Por hacer${items.length?` (${items.length})`:''}</h3><button class="linkbtn" data-act="goto" data-tab="proximos">Ver próximos</button></div>${items.length?items.slice(0,6).map(row).join('')+(items.length>6?`<button class="linkbtn small" data-act="goto" data-tab="proximos">y ${items.length-6} más ›</button>`:''):'<p class="muted small" style="padding:10px 0">Nada por pagar ni confirmar en los próximos 7 días.</p>'}</section>`;
+ const b=budgetRows(ui.month),budget=b.reduce((s,r)=>s+r.lim,0);
+ const mes=`<section class="home-block static"><div class="cardhead"><h3>${esc(monthLabel(ui.month))}</h3><button class="linkbtn" data-act="goto" data-tab="movs">Ver movimientos</button></div></section>`+summaryStrip([['Ingresos',money(tot.ing),'pos'],['Gastos',money(tot.gas),'neg'],['Te queda',money(tot.ing-tot.gas),tot.ing-tot.gas<0?'neg':'']])
+  +(budget>.005?`<button class="linkbtn small retained" data-act="goto" data-tab="budget" data-btype="gasto">Presupuesto: gastaste ${money(tot.gas)} de ${money(budget)} ›</button>`:'');
+ return top+todo+mes;}
+function vResumen(){const core=homeCore();const n=netWorth(),p=peopleTotals(),tot=monthTotals(ui.month),b=budgetRows(ui.month),budget=b.reduce((s,r)=>s+r.lim,0),up=upcomingPayments(7),next=upcomingPayments(31,todayStr(),true).find(e=>e.amount>.005&&!e.income),expected=typeof budgetExpected==='function'?budgetExpected(ui.month,'ingreso'):0,pending=typeof pendingFixed==='function'?pendingFixed():[];
  const blocks={resumen:()=>homeSummary(),
   deudas:()=>{const today=todayStr(),list=upcomingPayments(30,today,true).filter(e=>!e.income&&e.amount>.005&&e.kind!=='fixed'),late=list.filter(e=>e.date<today),soon=list.find(e=>e.date>=today),due=list.reduce((t,e)=>t+e.amount,0);
    const line=(l,v,cls='')=>`<div class="hline"><span>${l}</span><b class="num ${cls}">${v}</b></div>`;
@@ -2378,7 +2426,7 @@ function vResumen(){const n=netWorth(),p=peopleTotals(),tot=monthTotals(ui.month
   bonificacion:()=>{if(typeof educationInfo!=='function'||!educationAccount())return '';const i=educationInfo(+todayStr().slice(0,4));return `<section class="card home-block" data-act="accountDetail" data-id="${esc(i.account.id)}"><h3>Bonificación educacional ${i.year}</h3><p>Aportado <b class="num">${money(i.contributed)}</b> de ${money(i.projected)}</p>${progressBar(i.contributed,i.projected,'in')}<p>Comprobantes <b class="num">${money(i.receipts)}</b> de ${money(i.target)}</p>${progressBar(i.receipts,i.target,'in')}</section>`;},
   metas:()=>{const ms=metas().filter(m=>!m.pausada).map(metaInfo).slice(0,3);return ms.length?`<section class="card home-block static"><div class="cardhead"><h3>Metas</h3><button class="linkbtn" data-act="goto" data-tab="metas">Ver todas</button></div>${ms.map(i=>`<div class="tap-row" data-act="metaEdit" data-id="${esc(i.m.id)}"><p><b>${esc(i.m.name)}</b> <span class="num">${Math.round(i.pct*100)} %</span></p>${progressBar(i.done,i.goal,'in')}<span class="small muted">${esc(i.hint)}</span></div>`).join('')}</section>`:'';},
   ultimos:()=>`<section class="card home-block static"><div class="cardhead"><h3>Últimos movimientos</h3><button class="linkbtn" data-act="goto" data-tab="movs">Ver todos</button></div>${S.tx.filter(t=>txKind(t)!=='comprobante').slice(0,5).map(txRow).join('')||'<p class="muted">Toca + para registrar.</p>'}</section>`};
- return vInstall()+homeLayout().map(id=>blocks[id]()).join('')+`<div class="home-custom"><button class="linkbtn" data-act="homeCustomize">Personalizar inicio</button></div>`;
+ return vInstall()+core+homeLayout().map(id=>(blocks[id]||(()=>''))()).join('')+`<div class="home-custom"><button class="linkbtn" data-act="homeCustomize">Personalizar inicio</button></div>`;
 }
 
 /* Fijos: la misma fuente alimenta avisos, confirmaciones y presupuesto. */

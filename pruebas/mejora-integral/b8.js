@@ -18,6 +18,6 @@ const {start,create,assert}=require('../helpers');const seed=require('./seed');
  // Deudas y Próximos pagos
  await p.evaluate(()=>{S.people.push({id:'pe3',name:'SBP',kind:'empresa',u:1});S.tx.push({id:'pr1',kind:'prestamo_recibido',type:'transfer',person:'pe3',acc:'b1',amount:2100,currency:'PEN',pen:2100,date:'2026-11-25T08:00',note:'Adelanto',dueDate:'2026-11-30',u:1});sortTx();save();navigate('deudas');});
  const d=await p.textContent('#view');assert.match(d,/Empresas y bancos/);assert.match(d,/Empresa · Le debes · devolver el 30/);assert.doesNotMatch(d,/>Personas</);
- await p.evaluate(()=>navigate('resumen'));assert.ok(await p.evaluate(()=>upcomingPayments(7).some(e=>e.kind==='person'&&e.id==='pe3'&&e.amount===2100)));assert.match(await p.textContent('#view'),/Lo próximo: S\/\s?2,100\.00 el 30 nov\.? \(SBP\)|Vence en 30 días/);
+ await p.evaluate(()=>navigate('resumen'));assert.ok(await p.evaluate(()=>upcomingPayments(7).some(e=>e.kind==='person'&&e.id==='pe3'&&e.amount===2100)));assert.match(await p.textContent('#view'),/Devolver a SBP[\s\S]*S\/\s?2,100\.00/);
  assert.ok(await p.evaluate(()=>cashflow(30).ev.some(e=>e.name==='SBP'&&e.amt===-2100)));
  console.log('OK deudas con empresas; errores:',env.errors);}finally{await env.close();}})();

@@ -5,7 +5,10 @@ const {start,create,assert}=require('../helpers');const seed=require('./seed');
  await p.clock.setFixedTime(new Date('2026-11-25T22:30:00Z'));await p.reload();await create(p);await seed(p);
  await p.evaluate(()=>{S.people.push({id:'pe3',name:'SBP',kind:'empresa',u:1});S.tx.push({id:'pr1',kind:'prestamo_recibido',type:'transfer',person:'pe3',acc:'b1',amount:2100,currency:'PEN',pen:2100,date:'2026-11-25T08:00',note:'Adelanto',dueDate:'2026-12-15',u:1});sortTx();save();document.querySelectorAll('.toast').forEach(t=>t.remove());navigate('resumen');});
  await p.screenshot({path:OUT+'b9-inicio.png',fullPage:true});
- // Inicio: «Mis cuentas» justo después del resumen, y cada mosaico abre la cuenta
+ // Inicio v39: solo saldos, «Por hacer» y el mes; nada repetido
+ await p.evaluate(()=>navigate('resumen'));{const v=await p.textContent('#view');assert.match(v,/En tus cuentas[\s\S]*Debes[\s\S]*Por hacer[\s\S]*Ingresos[\s\S]*Gastos[\s\S]*Te queda/);assert.doesNotMatch(v,/Deudas pendientes|Próximos pagos \(7 días\)|Últimos movimientos/);}
+ // Inicio v39: «Mis cuentas» es opcional (Personalizar inicio); cada fila abre la cuenta
+ await p.evaluate(()=>{S.settings.home2={shown:['cuentas']};save();render();});
  const blocks=await p.$$eval('#view > section, #view > .card',els=>els.slice(0,3).map(e=>e.querySelector('h3')?.textContent||e.className));console.log(blocks);
  await p.click('.home-block .debt-row[data-act="openAccount"][data-id="b1"]');assert.equal(await p.evaluate(()=>ui.tab+':'+ui.accId),'cuenta:b1');
  await p.screenshot({path:OUT+'b9-cuenta-bcp.png',fullPage:true});

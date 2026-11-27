@@ -25,7 +25,7 @@ const {start,create,assert}=require('../helpers');const seed=require('./seed');
  assert.equal(await p.evaluate(()=>document.querySelector('#fTo')?.value),'b3');
  await p.evaluate(()=>{for(let i=0;i<5&&$('#bd');i++)closeModal();});
  // bloque opcional en Inicio
- await p.evaluate(()=>{S.settings.home={shown:['metas']};save();navigate('resumen');});assert.ok(await p.locator('text=Ver todas').count());
+ await p.evaluate(()=>{S.settings.home2={shown:['metas']};save();navigate('resumen');});assert.ok(await p.locator('text=Ver todas').count());
  // borrar
  await p.evaluate(()=>navigate('metas'));await p.click('.budcard >> nth=0');await p.click('#mtDel');await p.click('#askOk');assert.equal(await p.evaluate(()=>metas().length),1);
  console.log('OK bloque 4; errores:',env.errors);}finally{await env.close();}})();

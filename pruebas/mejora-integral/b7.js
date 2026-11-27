@@ -5,10 +5,10 @@ const {start,create,assert}=require('../helpers');const seed=require('./seed');
  await p.clock.setFixedTime(new Date('2026-11-24T13:15:00Z'));await p.reload();await create(p);await seed(p);
  await p.evaluate(()=>{S.tx=S.tx.filter(t=>t.id!=='g5');save();document.querySelectorAll('.toast').forEach(t=>t.remove());navigate('resumen');});
  // 1. Google One (día 25) se puede registrar hoy, antes de su día
- await p.click('.payrow[data-id="f2"]');await p.waitForSelector('#fSave');
+ await p.click('.todo[data-id="f2"]');await p.waitForSelector('#fSave');
  assert.equal(await p.evaluate(()=>document.querySelector('[data-field="fecha"] b')?.textContent||''),'24 de noviembre de 2026');
  await p.click('#fSave');let tx=await p.evaluate(()=>S.tx.find(t=>t.fijo==='f2'));assert.equal(tx.per,'2026-11');assert.equal(tx.date.slice(0,10),'2026-11-24');assert.equal(tx.currency,'USD');
- assert.equal(await p.locator('.payrow[data-id="f2"]').count(),0,'ya no está pendiente');
+ assert.equal(await p.locator('.todo[data-id="f2"]').count(),0,'ya no está pendiente');
  // 2. Netflix registrado a mano con + cuenta como el fijo de noviembre
  await p.evaluate(()=>txFormWith({type:'gasto',amount:44.9,acc:'t3',cat:'PERSONAL',sub:'SUSCRIPCIONES',note:'netflix'}));await p.waitForSelector('#fSave');await p.click('#fSave');
  const t=await p.textContent('.toast');console.log(t);assert.match(t,/Contado como Netflix de noviembre/);
