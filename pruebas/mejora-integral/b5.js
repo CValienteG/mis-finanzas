@@ -5,7 +5,7 @@ const {start,create,assert}=require('../helpers');const seed=require('./seed');
  await p.clock.setFixedTime(new Date('2026-11-22T15:00:00Z'));await p.reload();await create(p);await seed(p);
  await p.evaluate(()=>{document.querySelectorAll('.toast').forEach(t=>t.remove());navigate('movs');});
  // búsqueda en vivo sin perder el cursor
- await p.click('#movQ');await p.keyboard.type('taxi');await p.waitForTimeout(400);
+ await p.click('[data-act="movSearch"]');await p.click('#movQ');await p.keyboard.type('taxi');await p.waitForTimeout(400);
  assert.equal(await p.evaluate(()=>document.activeElement.id),'movQ');assert.equal(await p.locator('#movBody .tx').count(),1);
  // buscar en todos los meses: sueldo de octubre
  await p.fill('#movQ','sueldo');await p.waitForTimeout(400);assert.equal(await p.locator('#movBody .tx').count(),0);
@@ -13,9 +13,10 @@ const {start,create,assert}=require('../helpers');const seed=require('./seed');
  // buscar por monto
  await p.fill('#movQ','745');await p.waitForTimeout(400);assert.equal(await p.locator('#movBody .tx').count(),1);
  await p.click('[data-act="movQClear"]');
- // filtros rápidos
- await p.click('[data-act="movType"][data-type="gasto"]');const g=await p.locator('#movBody .tx').count();assert.equal(g,7);
- await p.click('[data-act="movAccPick"]');await p.click('[data-pick="ef"]');assert.equal(await p.locator('#movBody .tx').count(),2);
+ // filtros (v38: desde el ícono del encabezado; cada filtro activo sale como chip con ✕)
+ await p.click('[data-act="movementFilters"]');await p.selectOption('#ftype','gasto');await p.click('#filterApply');const g=await p.locator('#movBody .tx').count();assert.equal(g,7);
+ await p.click('[data-act="movementFilters"]');await p.selectOption('#facc','ef');await p.click('#filterApply');assert.equal(await p.locator('#movBody .tx').count(),2);
+ await p.click('[data-act="movAccPick"]');assert.equal(await p.locator('#movBody .tx').count(),7);await p.evaluate(()=>{ui.f.acc='ef';render();});
  await p.screenshot({path:OUT+'b5-filtros.png'});
  await p.click('[data-act="clearF"]');
  // mantener presionado → selección; cambiar categoría a 2 y deshacer
